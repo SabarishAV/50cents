@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "825768938615",
+    "project_id": "cents-4c06b",
+    "storage_bucket": "cents-4c06b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:825768938615:android:257b02af2847fadbf84a72",
+        "android_client_info": {
+          "package_name": "com.app.u_50cents"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "825768938615-gi9sj673e4t1o58uni9dm2vvai6bo8lk.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDBuoX71_hv-aElVhalekYvhSgWho7D9HM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "825768938615-gi9sj673e4t1o58uni9dm2vvai6bo8lk.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
