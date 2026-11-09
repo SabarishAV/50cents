@@ -1,0 +1,6 @@
+pre-commit:
+  commands:
+    format-check:
+      run: dart format -o none --set-exit-if-changed .
+    lint:
+      run: flutter analyze
