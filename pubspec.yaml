@@ -14,9 +14,16 @@ dependencies:
 
 dev_dependencies:
   dart_husky: ^1.0.0
+  flutter_launcher_icons: ^0.14.1
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
 
 flutter:
   uses-material-design: true
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icon/app_icon_v1.png"
+  remove_alpha_ios: true
