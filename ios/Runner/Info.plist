@@ -26,6 +26,8 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>NSCameraUsageDescription</key>
 	<string>50cents uses the camera to scan UPI payment QR codes.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>50cents uses your contacts to show the name of the person you are paying by phone number.</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>upi</string>

@@ -87,8 +87,15 @@ Future<bool> launchUpiApp(Uri uri) async {
 /// Builds the standard UPI intent for a phone number.
 ///
 /// UPI apps resolve phone numbers through their own bank/PSP mapping, so the
-/// conventional `number@upi` handle is used as the payee address.
-UpiPayment phonePayment(String phone, {String? note}) {
+/// conventional `number@upi` handle is used as the payee address. The payee
+/// name (`pn`) is only included when we have one, letting the UPI app resolve
+/// the account holder's real name otherwise.
+UpiPayment phonePayment(String phone, {String? note, String? payeeName}) {
   final digits = phone.replaceAll(RegExp(r'[^0-9]'), '');
-  return UpiPayment(payeeVpa: '$digits@upi', payeeName: 'Mobile $digits', note: note);
+  final cleanedName = payeeName?.trim();
+  return UpiPayment(
+    payeeVpa: '$digits@upi',
+    payeeName: (cleanedName == null || cleanedName.isEmpty) ? null : cleanedName,
+    note: note,
+  );
 }

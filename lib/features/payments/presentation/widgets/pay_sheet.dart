@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:_50cents/core/theme/app_colors.dart';
 import 'package:_50cents/core/theme/app_inputs.dart';
 import 'package:_50cents/core/widgets/neon_button.dart';
+import 'package:_50cents/features/payments/data/contact_lookup.dart';
 import 'package:_50cents/features/payments/data/models/create_payment_record_request.dart';
 import 'package:_50cents/features/payments/data/models/payment_category.dart';
 import 'package:_50cents/features/payments/data/payment_repository.dart';
@@ -40,6 +41,7 @@ class _PaySheet extends ConsumerStatefulWidget {
 class _PaySheetState extends ConsumerState<_PaySheet> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _payeeController;
+  late final TextEditingController _payeeNameController;
   late final TextEditingController _amountController;
   late final TextEditingController _noteController;
 
@@ -55,6 +57,11 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
   Timer? _predictDebounce;
   int _predictRequest = 0;
 
+  Timer? _contactDebounce;
+  int _contactRequest = 0;
+  bool _lookingUpContact = false;
+  String? _autoFilledContactName;
+
   bool get _isPhone => widget.target == PayTarget.phone;
   bool get _isScanned => widget.target == PayTarget.upi && widget.scanned != null;
 
@@ -63,19 +70,23 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
     super.initState();
     final scanned = widget.scanned;
     _payeeController = TextEditingController(text: scanned?.payeeVpa ?? '');
+    _payeeNameController = TextEditingController(text: scanned?.payeeName ?? '');
     _amountController = TextEditingController(text: scanned?.amount ?? '');
     _noteController = TextEditingController(text: scanned?.note ?? '');
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (_recipientName.trim().isNotEmpty) _schedulePrediction();
+      if (_payeeController.text.trim().isNotEmpty) _scheduleContactLookup();
     });
   }
 
   @override
   void dispose() {
     _predictDebounce?.cancel();
+    _contactDebounce?.cancel();
     _payeeController.dispose();
+    _payeeNameController.dispose();
     _amountController.dispose();
     _noteController.dispose();
     super.dispose();
@@ -101,6 +112,9 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
 
   /// Name sent to the payment-record and category-prediction APIs.
   String get _recipientName {
+    final typedName = _payeeNameController.text.trim();
+    if (typedName.isNotEmpty) return typedName;
+
     final rawPayee = _payeeController.text.trim();
 
     if (_isPhone) {
@@ -108,13 +122,81 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
       return digits.isEmpty ? '' : 'Mobile $digits';
     }
 
-    final scannedName = widget.scanned?.payeeName?.trim();
-    final scannedVpa = widget.scanned?.payeeVpa;
-    if (scannedName != null && scannedName.isNotEmpty && rawPayee == scannedVpa) {
-      return scannedName;
+    return rawPayee;
+  }
+
+  /// Looks up the saved contact name after the phone number stops changing.
+  void _scheduleContactLookup() {
+    _contactDebounce?.cancel();
+    final requestId = ++_contactRequest;
+    final phone = _contactPhoneFromPayee();
+
+    if (phone == null) {
+      final autoName = _autoFilledContactName;
+      final shouldClear = autoName != null && _payeeNameController.text.trim() == autoName;
+      if (mounted && (_lookingUpContact || shouldClear)) {
+        setState(() {
+          _lookingUpContact = false;
+          if (shouldClear) {
+            _payeeNameController.clear();
+            _autoFilledContactName = null;
+          }
+        });
+        if (shouldClear) _schedulePrediction();
+      }
+      return;
     }
 
-    return rawPayee;
+    _contactDebounce = Timer(const Duration(milliseconds: 350), () => _lookupContactName(phone, requestId));
+  }
+
+  /// Returns the phone number to look up. In phone mode this is the entered
+  /// number; in UPI mode it is the local part of a phone-based VPA such as
+  /// `9876543210@ybl`.
+  String? _contactPhoneFromPayee() {
+    final rawPayee = _payeeController.text.trim();
+
+    if (_isPhone) {
+      final digits = rawPayee.replaceAll(RegExp(r'[^0-9]'), '');
+      if (digits.length >= 10 && digits.length <= 13) return digits;
+      return null;
+    }
+
+    final localPart = rawPayee.split('@').first;
+    final digits = localPart.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length == 10 && digits == localPart) return digits;
+    return null;
+  }
+
+  Future<void> _lookupContactName(String phone, int requestId) async {
+    if (mounted) setState(() => _lookingUpContact = true);
+
+    final name = await ContactNameLookup.nameForPhone(phone);
+    if (!mounted || requestId != _contactRequest) return;
+
+    final current = _payeeNameController.text.trim();
+    var nameChanged = false;
+
+    setState(() {
+      _lookingUpContact = false;
+
+      if (name == null) {
+        if (current.isNotEmpty && current == _autoFilledContactName) {
+          _payeeNameController.clear();
+          _autoFilledContactName = null;
+          nameChanged = true;
+        }
+        return;
+      }
+
+      if (current.isEmpty || current == _autoFilledContactName) {
+        _payeeNameController.text = name;
+        _autoFilledContactName = name;
+        nameChanged = true;
+      }
+    });
+
+    if (nameChanged) _schedulePrediction();
   }
 
   /// Rebuilds the prediction after a short pause so we don't call the API on
@@ -189,12 +271,13 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
     final note = _noteController.text.trim();
     // UPI apps display this as the transaction note (`tn` in the intent).
     final noteForUpi = note.isEmpty ? 'Paid via 50cents' : note;
+    final upiPayeeName = _payeeNameController.text.trim();
 
     final UpiPayment payment;
     if (_isPhone) {
-      payment = phonePayment(rawPayee, note: noteForUpi);
+      payment = phonePayment(rawPayee, note: noteForUpi, payeeName: upiPayeeName);
     } else {
-      payment = UpiPayment(payeeVpa: rawPayee, payeeName: widget.scanned?.payeeName, note: noteForUpi);
+      payment = UpiPayment(payeeVpa: rawPayee, payeeName: upiPayeeName.isEmpty ? null : upiPayeeName, note: noteForUpi);
     }
 
     final intent = payment.toUri(amountOverride: amount.toStringAsFixed(2));
@@ -321,7 +404,7 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
                       ),
                     ],
                   ),
-                  if (_isScanned && widget.scanned?.payeeName != null) ...[
+                  if (_payeeNameController.text.trim().isNotEmpty) ...[
                     const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -332,11 +415,15 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.storefront_outlined, color: AppColors.textMuted, size: 16),
+                          Icon(
+                            _isPhone ? Icons.person_outline_rounded : Icons.storefront_outlined,
+                            color: AppColors.textMuted,
+                            size: 16,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              widget.scanned!.payeeName!,
+                              _payeeNameController.text.trim(),
                               style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
                             ),
                           ),
@@ -359,6 +446,7 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
                     onChanged: (_) {
                       if (_error != null) setState(() => _error = null);
                       _schedulePrediction();
+                      _scheduleContactLookup();
                     },
                     validator: (value) {
                       final text = value?.trim() ?? '';
@@ -374,6 +462,39 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
                         return 'Enter a valid UPI ID (like name@bank)';
                       }
                       return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _payeeNameController,
+                    maxLength: 255,
+                    textInputAction: TextInputAction.next,
+                    textCapitalization: TextCapitalization.words,
+                    style: const TextStyle(color: AppColors.textPrimary),
+                    decoration:
+                        appInputDecoration(
+                          _isPhone ? 'Payee name' : 'Payee name (optional)',
+                          Icons.person_outline_rounded,
+                          hint: _isPhone ? 'From your contacts' : 'Name shown in your UPI app',
+                        ).copyWith(
+                          counterText: '',
+                          suffixIcon: _lookingUpContact
+                              ? const Padding(
+                                  padding: EdgeInsets.only(right: 14),
+                                  child: SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 1.6, color: AppColors.neonBlue),
+                                  ),
+                                )
+                              : null,
+                        ),
+                    onChanged: (_) {
+                      _autoFilledContactName = null;
+                      setState(() {
+                        if (_error != null) _error = null;
+                      });
+                      _schedulePrediction();
                     },
                   ),
                   const SizedBox(height: 16),
