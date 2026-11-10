@@ -3,11 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:_50cents/core/theme/app_theme.dart';
-import 'package:_50cents/features/auth/presentation/pages/home_page.dart';
 import 'package:_50cents/features/auth/presentation/pages/login_page.dart';
 import 'package:_50cents/features/auth/presentation/pages/register_page.dart';
 import 'package:_50cents/features/auth/presentation/pages/splash_page.dart';
 import 'package:_50cents/features/auth/presentation/providers/auth_provider.dart';
+import 'package:_50cents/features/home/presentation/pages/home_page.dart';
+import 'package:_50cents/features/payments/presentation/pages/scan_page.dart';
+import 'package:_50cents/features/profile/presentation/pages/profile_page.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -45,6 +47,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/login', name: 'login', builder: (context, state) => const LoginPage()),
       GoRoute(path: '/register', name: 'register', builder: (context, state) => const RegisterPage()),
       GoRoute(path: '/home', name: 'home', builder: (context, state) => const HomePage()),
+      GoRoute(path: '/profile', name: 'profile', builder: (context, state) => const ProfilePage()),
+      GoRoute(path: '/scan', name: 'scan', builder: (context, state) => const ScanPage()),
     ],
   );
 });

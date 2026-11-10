@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:_50cents/core/theme/app_colors.dart';
+import 'package:_50cents/core/widgets/app_logo.dart';
 import 'package:_50cents/core/widgets/neon_background.dart';
 
 /// Shared chrome for the login / register screens: neon background, brand
@@ -86,24 +87,7 @@ class _BrandHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Container(
-          width: 62,
-          height: 62,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppColors.neonBlue.withValues(alpha: 0.95), AppColors.neonBlue.withValues(alpha: 0.55)],
-            ),
-            boxShadow: [BoxShadow(color: AppColors.neonBlue.withValues(alpha: 0.28), blurRadius: 26, spreadRadius: 1)],
-          ),
-          alignment: Alignment.center,
-          child: const Text(
-            '50¢',
-            style: TextStyle(color: Colors.black, fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -1),
-          ),
-        ),
+        const AppLogo(size: 66, radius: 19),
         const SizedBox(height: 16),
         const Text(
           '50cents',

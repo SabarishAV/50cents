@@ -80,12 +80,20 @@ class GoogleSignInButton extends ConsumerWidget {
         onPressed: isLoading ? null : () => _handleSignIn(ref, context),
         icon: isLoading
             ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-            : Image.asset(
-                'assets/google_logo.png',
-                width: 20,
-                height: 20,
-                errorBuilder: (context, error, stackTrace) =>
-                    const Icon(Icons.g_mobiledata, size: 24, color: AppColors.textMuted),
+            : Container(
+                width: 24,
+                height: 24,
+                padding: const EdgeInsets.all(3),
+                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                child: Image.asset(
+                  'assets/google_logo.png',
+                  width: 18,
+                  height: 18,
+                  fit: BoxFit.contain,
+                  filterQuality: FilterQuality.high,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const Icon(Icons.g_mobiledata, size: 20, color: Colors.black),
+                ),
               ),
         label: isLoading ? const Text('Signing in...') : const Text('Continue with Google'),
         style: OutlinedButton.styleFrom(

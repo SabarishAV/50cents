@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:_50cents/core/theme/app_colors.dart';
 import 'package:_50cents/core/theme/app_inputs.dart';
+import 'package:_50cents/core/widgets/neon_button.dart';
 
 import '../providers/auth_provider.dart';
 import '../widgets/auth_shell.dart';
@@ -155,28 +156,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             ),
             if (authState.error != null) ...[const SizedBox(height: 18), AuthErrorBanner(message: authState.error!)],
             const SizedBox(height: 24),
-            SizedBox(
-              height: 52,
-              child: ElevatedButton(
-                onPressed: isBusy ? null : _handleLogin,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.neonBlue,
-                  foregroundColor: Colors.black,
-                  disabledBackgroundColor: AppColors.neonBlue.withValues(alpha: 0.4),
-                  disabledForegroundColor: Colors.black54,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                ),
-                child: authState.isLoggingIn
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
-                      )
-                    : const Text('Log in'),
-              ),
-            ),
+            NeonButton(label: 'Log in', loading: authState.isLoggingIn, onPressed: isBusy ? null : _handleLogin),
             const SizedBox(height: 24),
             const AuthDivider(),
             const SizedBox(height: 20),

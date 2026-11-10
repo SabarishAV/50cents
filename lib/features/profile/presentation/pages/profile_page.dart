@@ -5,16 +5,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:_50cents/core/theme/app_colors.dart';
+import 'package:_50cents/core/widgets/app_logo.dart';
 import 'package:_50cents/core/widgets/neon_background.dart';
 import 'package:_50cents/features/auth/data/models/auth_session.dart';
+import 'package:_50cents/features/auth/presentation/providers/auth_provider.dart';
+import 'package:_50cents/features/auth/presentation/widgets/user_avatar.dart';
+import 'package:_50cents/features/home/presentation/widgets/app_bottom_nav.dart';
 
-import '../providers/auth_provider.dart';
-
-/// Home page — only accessible to authenticated users.
-/// Shows the signed-in account, details decoded from the stored token and a
-/// logout action that clears the session.
-class HomePage extends ConsumerWidget {
-  const HomePage({super.key});
+/// Profile screen — account details, decoded token claims and logout.
+class ProfilePage extends ConsumerWidget {
+  const ProfilePage({super.key});
 
   Future<void> _logout(BuildContext context, WidgetRef ref) async {
     final shouldLogout = await showDialog<bool>(
@@ -66,61 +66,44 @@ class HomePage extends ConsumerWidget {
     return NeonBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          automaticallyImplyLeading: false,
-          titleSpacing: 20,
-          title: Row(
-            children: [
-              Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(borderRadius: BorderRadius.circular(9), color: AppColors.neonBlue),
-                alignment: Alignment.center,
-                child: const Text(
-                  '50¢',
-                  style: TextStyle(color: Colors.black, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: -0.5),
-                ),
-              ),
-              const SizedBox(width: 10),
-              const Text(
-                '50cents',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.logout_rounded, color: AppColors.textMuted, size: 22),
-              onPressed: () => _logout(context, ref),
-              tooltip: 'Log out',
-            ),
-            const SizedBox(width: 8),
-          ],
-        ),
         body: session == null
             ? const Center(child: CircularProgressIndicator(color: AppColors.neonBlue, strokeWidth: 2))
             : SafeArea(
-                top: false,
                 child: Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 640),
                     child: ListView(
-                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
                       children: [
-                        _Greeting(session: session),
-                        const SizedBox(height: 24),
+                        Row(
+                          children: [
+                            const AppLogo(size: 38, radius: 11),
+                            const SizedBox(width: 10),
+                            const Text(
+                              'Profile',
+                              style: TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 19,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.6,
+                              ),
+                            ),
+                            const Spacer(),
+                            IconButton(
+                              tooltip: 'Log out',
+                              onPressed: () => _logout(context, ref),
+                              icon: const Icon(Icons.logout_rounded, color: AppColors.textMuted, size: 22),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 22),
+                        _ProfileHeader(session: session),
+                        const SizedBox(height: 22),
                         _SessionStatusCard(session: session),
                         const SizedBox(height: 16),
                         _AccountCard(session: session),
                         const SizedBox(height: 16),
-                        if (session.claims.isNotEmpty) _ClaimsCard(session: session),
-                        if (session.claims.isNotEmpty) const SizedBox(height: 16),
-                        const SizedBox(height: 8),
+                        if (session.claims.isNotEmpty) ...[_ClaimsCard(session: session), const SizedBox(height: 16)],
                         SizedBox(
                           height: 52,
                           child: OutlinedButton.icon(
@@ -140,96 +123,84 @@ class HomePage extends ConsumerWidget {
                   ),
                 ),
               ),
+        bottomNavigationBar: const AppBottomNav(current: AppTab.profile),
       ),
     );
   }
 }
 
-class _Greeting extends StatelessWidget {
-  const _Greeting({required this.session});
+class _ProfileHeader extends StatelessWidget {
+  const _ProfileHeader({required this.session});
 
   final AuthSession session;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        _Avatar(session: session),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Welcome back',
-                style: TextStyle(color: AppColors.textMuted, fontSize: 13, letterSpacing: 0.3),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                session.displayName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.4,
-                ),
-              ),
-              if (session.email != null) ...[
-                const SizedBox(height: 2),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.neonBlue.withValues(alpha: 0.16), AppColors.surface, AppColors.surface],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.neonBlue.withValues(alpha: 0.18)),
+        boxShadow: [BoxShadow(color: AppColors.neonBlue.withValues(alpha: 0.07), blurRadius: 30, spreadRadius: 1)],
+      ),
+      child: Row(
+        children: [
+          UserAvatar(session: session, size: 68),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Text(
-                  session.email!,
+                  session.displayName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 21,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.4,
+                  ),
+                ),
+                if (session.email != null) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    session.email!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.income.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.income.withValues(alpha: 0.28)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.check_circle_rounded, color: AppColors.income, size: 12),
+                      SizedBox(width: 5),
+                      Text(
+                        'Signed in',
+                        style: TextStyle(color: AppColors.income, fontSize: 11, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
                 ),
               ],
-            ],
+            ),
           ),
-        ),
-      ],
-    );
-  }
-}
-
-class _Avatar extends StatelessWidget {
-  const _Avatar({required this.session});
-
-  final AuthSession session;
-
-  @override
-  Widget build(BuildContext context) {
-    final fallback = Text(
-      session.initials,
-      style: const TextStyle(color: AppColors.neonBlue, fontSize: 22, fontWeight: FontWeight.w700),
-    );
-
-    final avatarUrl = session.avatarUrl;
-
-    return Container(
-      width: 64,
-      height: 64,
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: AppColors.neonBlue.withValues(alpha: 0.6), width: 1.5),
-        boxShadow: [BoxShadow(color: AppColors.neonBlue.withValues(alpha: 0.15), blurRadius: 18, spreadRadius: 1)],
-      ),
-      child: ClipOval(
-        child: Container(
-          color: AppColors.surface,
-          alignment: Alignment.center,
-          child: avatarUrl == null
-              ? fallback
-              : Image.network(
-                  avatarUrl,
-                  width: 60,
-                  height: 60,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Center(child: fallback),
-                ),
-        ),
+        ],
       ),
     );
   }
@@ -250,16 +221,16 @@ class _SessionStatusCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.income.withValues(alpha: 0.07),
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.income.withValues(alpha: 0.25)),
+        border: Border.all(color: AppColors.border),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: AppColors.income.withValues(alpha: 0.14), shape: BoxShape.circle),
+            decoration: BoxDecoration(color: AppColors.income.withValues(alpha: 0.12), shape: BoxShape.circle),
             child: const Icon(Icons.verified_user_outlined, color: AppColors.income, size: 18),
           ),
           const SizedBox(width: 12),
@@ -310,11 +281,12 @@ class _ClaimsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final pretty = const JsonEncoder.withIndent('  ').convert(session.claims);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
+    return Material(
+      color: AppColors.surface,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
+        side: const BorderSide(color: AppColors.border),
       ),
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
