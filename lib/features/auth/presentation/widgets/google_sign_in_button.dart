@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+
 import 'package:_50cents/core/config/env.dart';
 import 'package:_50cents/core/theme/app_colors.dart';
 
@@ -38,32 +39,33 @@ class GoogleSignInButton extends ConsumerWidget {
         throw Exception('No ID token returned from Google');
       }
 
-      await ref.read(authProvider.notifier).googleLogin(idToken);
+      final success = await ref.read(authProvider.notifier).googleLogin(idToken);
+      if (!context.mounted) return;
 
-      final state = ref.read(authProvider);
-      if (state.isAuthenticated) {
+      if (success) {
         onSignedIn?.call();
-      } else if (state.error != null) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(state.error!), backgroundColor: AppColors.expense));
-        }
+        return;
+      }
+
+      final error = ref.read(authProvider).error;
+      if (error != null) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(error), backgroundColor: AppColors.expense));
       }
     } on GoogleSignInException catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.description?.isNotEmpty == true ? e.description! : 'Google sign-in failed'),
-            backgroundColor: AppColors.expense,
-          ),
-        );
-      }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.description?.isNotEmpty == true ? e.description! : 'Google sign-in failed'),
+          backgroundColor: AppColors.expense,
+        ),
+      );
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')), backgroundColor: AppColors.expense),
-        );
-      }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')), backgroundColor: AppColors.expense),
+      );
     }
   }
 
@@ -77,19 +79,20 @@ class GoogleSignInButton extends ConsumerWidget {
       child: OutlinedButton.icon(
         onPressed: isLoading ? null : () => _handleSignIn(ref, context),
         icon: isLoading
-            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
             : Image.asset(
                 'assets/google_logo.png',
                 width: 20,
                 height: 20,
                 errorBuilder: (context, error, stackTrace) =>
-                    const Icon(Icons.g_mobiledata, size: 20, color: AppColors.textMuted),
+                    const Icon(Icons.g_mobiledata, size: 24, color: AppColors.textMuted),
               ),
-        label: isLoading ? const Text('Signing in with Google...') : const Text('Sign in with Google'),
+        label: isLoading ? const Text('Signing in...') : const Text('Continue with Google'),
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.textPrimary,
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
           side: const BorderSide(color: AppColors.border),
-          backgroundColor: AppColors.surface,
+          backgroundColor: AppColors.background.withValues(alpha: 0.4),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),

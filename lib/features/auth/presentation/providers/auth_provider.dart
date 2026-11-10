@@ -1,39 +1,53 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'package:_50cents/core/network/api_exception.dart';
 import 'package:_50cents/core/storage/token_storage.dart';
 
 import '../../data/auth_repository.dart';
+import '../../data/models/auth_session.dart';
 import '../../data/models/register_request.dart';
 
+const _unset = Object();
+
 class AuthState {
+  /// `false` until the persisted session has been read from secure storage.
+  /// The router shows a splash screen while this is `false`.
+  final bool isInitialized;
   final bool isRegistering;
   final bool isLoggingIn;
   final bool isGoogleSigningIn;
   final String? error;
-  final bool isAuthenticated;
+
+  /// Token + decoded claims for the signed-in user.
+  final AuthSession? session;
 
   const AuthState({
+    this.isInitialized = false,
     this.isRegistering = false,
     this.isLoggingIn = false,
     this.isGoogleSigningIn = false,
     this.error,
-    this.isAuthenticated = false,
+    this.session,
   });
 
+  bool get isAuthenticated => session != null;
+
   AuthState copyWith({
+    bool? isInitialized,
     bool? isRegistering,
     bool? isLoggingIn,
     bool? isGoogleSigningIn,
-    String? error,
-    bool? isAuthenticated,
+    Object? error = _unset,
+    Object? session = _unset,
   }) {
     return AuthState(
+      isInitialized: isInitialized ?? this.isInitialized,
       isRegistering: isRegistering ?? this.isRegistering,
       isLoggingIn: isLoggingIn ?? this.isLoggingIn,
       isGoogleSigningIn: isGoogleSigningIn ?? this.isGoogleSigningIn,
-      error: error,
-      isAuthenticated: isAuthenticated ?? this.isAuthenticated,
+      error: identical(error, _unset) ? this.error : error as String?,
+      session: identical(session, _unset) ? this.session : session as AuthSession?,
     );
   }
 }
@@ -45,83 +59,128 @@ class AuthNotifier extends Notifier<AuthState> {
   TokenStorage get _tokenStorage => ref.read(tokenStorageProvider);
 
   @override
-  AuthState build() => const AuthState();
+  AuthState build() {
+    // Kick off session restoration; the state flips to initialized once done.
+    _restoreSession();
+    return const AuthState();
+  }
+
+  Future<void> _restoreSession() async {
+    try {
+      final session = await _tokenStorage.readSession();
+      if (session == null) {
+        state = const AuthState(isInitialized: true);
+        return;
+      }
+
+      if (session.isExpired) {
+        await _tokenStorage.clear();
+        state = const AuthState(isInitialized: true);
+        return;
+      }
+
+      state = AuthState(isInitialized: true, session: session);
+    } catch (_) {
+      // Secure storage unavailable/corrupted — treat the user as signed out.
+      state = const AuthState(isInitialized: true);
+    }
+  }
 
   /// Register a new account via POST /auth/register.
   /// Response: { success: true, message: "string" }
-  Future<void> register(RegisterRequest request) async {
+  /// Returns `true` when the account was created.
+  Future<bool> register(RegisterRequest request) async {
     state = state.copyWith(isRegistering: true, isLoggingIn: false, isGoogleSigningIn: false, error: null);
     try {
       final response = await _repository.register(request);
-      if (response.success) {
-        state = state.copyWith(isRegistering: false, error: null);
-      } else {
-        state = state.copyWith(isRegistering: false, error: response.message);
-      }
+      state = state.copyWith(
+        isRegistering: false,
+        error: response.success ? null : (response.message.isEmpty ? 'Registration failed' : response.message),
+      );
+      return response.success;
     } catch (e) {
       state = state.copyWith(isRegistering: false, error: _formatError(e));
+      return false;
     }
   }
 
   /// Sign up / log in with Google via POST /auth/google.
   /// Response: { success: true, token: "string" }
-  Future<void> googleLogin(String idToken) async {
+  /// Returns `true` when the session was stored.
+  Future<bool> googleLogin(String idToken) async {
     state = state.copyWith(isGoogleSigningIn: true, isRegistering: false, isLoggingIn: false, error: null);
     try {
       final response = await _repository.googleLogin(idToken);
-      if (response.success && response.token != null) {
-        await _tokenStorage.save(response.token!);
-        state = const AuthState(
-          isGoogleSigningIn: false,
-          isRegistering: false,
-          isLoggingIn: false,
-          error: null,
-          isAuthenticated: true,
-        );
-      } else {
-        state = state.copyWith(isGoogleSigningIn: false, error: response.message ?? 'Google sign-in failed');
-      }
+      return await _completeLogin(
+        success: response.success,
+        token: response.token,
+        fallbackMessage: response.message ?? 'Google sign-in failed',
+      );
     } catch (e) {
       state = state.copyWith(isGoogleSigningIn: false, error: _formatError(e));
+      return false;
     }
   }
 
   /// Login via POST /auth/login.
   /// Response: { success: true, token: "string" }
-  Future<void> login(String identifier, String password) async {
+  /// Returns `true` when the session was stored.
+  Future<bool> login(String identifier, String password) async {
     state = state.copyWith(isLoggingIn: true, isRegistering: false, isGoogleSigningIn: false, error: null);
     try {
       final response = await _repository.login(identifier, password);
-      if (response.success && response.token != null) {
-        await _tokenStorage.save(response.token!);
-        state = const AuthState(
-          isGoogleSigningIn: false,
-          isRegistering: false,
-          isLoggingIn: false,
-          error: null,
-          isAuthenticated: true,
-        );
-      } else {
-        state = state.copyWith(isLoggingIn: false, error: response.message ?? 'Login failed');
-      }
+      return await _completeLogin(
+        success: response.success,
+        token: response.token,
+        fallbackMessage: response.message ?? 'Login failed',
+      );
     } catch (e) {
       state = state.copyWith(isLoggingIn: false, error: _formatError(e));
+      return false;
     }
   }
 
+  /// Persists the token + decoded claims and marks the user as signed in.
+  Future<bool> _completeLogin({required bool success, required String? token, required String fallbackMessage}) async {
+    if (!success || token == null || token.isEmpty) {
+      state = state.copyWith(
+        isLoggingIn: false,
+        isGoogleSigningIn: false,
+        isRegistering: false,
+        error: fallbackMessage,
+      );
+      return false;
+    }
+
+    final session = AuthSession.fromToken(token);
+    try {
+      await _tokenStorage.saveSession(session);
+    } catch (_) {
+      state = state.copyWith(
+        isLoggingIn: false,
+        isGoogleSigningIn: false,
+        isRegistering: false,
+        error: 'Could not store your session securely. Please try again.',
+      );
+      return false;
+    }
+
+    state = AuthState(isInitialized: true, session: session);
+    return true;
+  }
+
   void clearError() {
-    state = state.copyWith(error: null);
+    if (state.error != null) {
+      state = state.copyWith(error: null);
+    }
   }
 
   Future<void> logout() async {
-    await _tokenStorage.clear();
-    state = const AuthState(
-      isGoogleSigningIn: false,
-      isRegistering: false,
-      isLoggingIn: false,
-      error: null,
-      isAuthenticated: false,
-    );
+    try {
+      await _tokenStorage.clear();
+    } finally {
+      state = const AuthState(isInitialized: true);
+    }
   }
 
   String _formatError(dynamic e) {

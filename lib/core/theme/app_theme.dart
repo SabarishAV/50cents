@@ -22,6 +22,18 @@ class AppTheme {
       backgroundColor: AppColors.background,
       foregroundColor: AppColors.textPrimary,
       elevation: 0,
+      scrolledUnderElevation: 0,
+      centerTitle: false,
     ),
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: AppColors.surface,
+      contentTextStyle: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: AppColors.border),
+      ),
+    ),
+    progressIndicatorTheme: const ProgressIndicatorThemeData(color: AppColors.neonBlue),
   );
 }
