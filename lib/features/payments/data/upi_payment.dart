@@ -49,11 +49,15 @@ class UpiPayment {
   }
 
   Uri toUri({String? amountOverride, String? noteOverride}) {
+    // Prefer an explicit override, but otherwise keep the note that came from
+    // the QR code or was entered in the pay sheet. The UPI spec calls this
+    // parameter `tn` (transaction note).
+    final effectiveNote = noteOverride ?? note;
     final params = <String, String>{
       'pa': payeeVpa,
       'pn': ?payeeName,
       if (amountOverride != null && amountOverride.isNotEmpty) 'am': amountOverride,
-      if (noteOverride != null && noteOverride.isNotEmpty) 'tn': noteOverride,
+      if (effectiveNote != null && effectiveNote.isNotEmpty) 'tn': effectiveNote,
       'cu': 'INR',
     };
     return Uri(scheme: 'upi', host: 'pay', queryParameters: params);
@@ -84,7 +88,7 @@ Future<bool> launchUpiApp(Uri uri) async {
 ///
 /// UPI apps resolve phone numbers through their own bank/PSP mapping, so the
 /// conventional `number@upi` handle is used as the payee address.
-UpiPayment phonePayment(String phone) {
+UpiPayment phonePayment(String phone, {String? note}) {
   final digits = phone.replaceAll(RegExp(r'[^0-9]'), '');
-  return UpiPayment(payeeVpa: '$digits@upi', payeeName: 'Mobile $digits');
+  return UpiPayment(payeeVpa: '$digits@upi', payeeName: 'Mobile $digits', note: note);
 }

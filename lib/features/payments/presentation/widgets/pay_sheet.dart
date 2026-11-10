@@ -187,16 +187,14 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
     final amount = double.parse(amountText);
     final rawPayee = _payeeController.text.trim();
     final note = _noteController.text.trim();
+    // UPI apps display this as the transaction note (`tn` in the intent).
+    final noteForUpi = note.isEmpty ? 'Paid via 50cents' : note;
 
     final UpiPayment payment;
     if (_isPhone) {
-      payment = phonePayment(rawPayee);
+      payment = phonePayment(rawPayee, note: noteForUpi);
     } else {
-      payment = UpiPayment(
-        payeeVpa: rawPayee,
-        payeeName: widget.scanned?.payeeName,
-        note: note.isEmpty ? 'Paid via 50cents' : note,
-      );
+      payment = UpiPayment(payeeVpa: rawPayee, payeeName: widget.scanned?.payeeName, note: noteForUpi);
     }
 
     final intent = payment.toUri(amountOverride: amount.toStringAsFixed(2));
