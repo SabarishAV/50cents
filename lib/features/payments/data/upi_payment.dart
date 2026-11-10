@@ -60,6 +60,15 @@ class UpiPayment {
   }
 }
 
+/// Whether an installed app can handle this UPI intent.
+Future<bool> canLaunchUpiApp(Uri uri) async {
+  try {
+    return await canLaunchUrl(uri);
+  } catch (_) {
+    return false;
+  }
+}
+
 /// Opens the user's installed UPI app with the given intent.
 ///
 /// Returns `false` when no app can handle the intent.

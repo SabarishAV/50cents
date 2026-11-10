@@ -32,7 +32,8 @@ flutter:
 
   assets:
     - .env
-    - assets/
+    - assets/google_logo.png
+    - assets/icon/app_icon_v1.png
 
 flutter_launcher_icons:
   android: "launcher_icon"
