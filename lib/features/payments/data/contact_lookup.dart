@@ -1,4 +1,4 @@
-import 'package:flutter_contacts/flutter_contacts.dart';
+import 'contact_directory.dart';
 
 /// Looks up a phone number in the device's address book.
 ///
@@ -8,68 +8,16 @@ import 'package:flutter_contacts/flutter_contacts.dart';
 class ContactNameLookup {
   ContactNameLookup._();
 
-  static Map<String, String>? _byPhone;
-  static Future<Map<String, String>>? _pending;
-  static bool _permissionDenied = false;
-
   /// Returns the saved contact name for [phone], if one can be found.
   static Future<String?> nameForPhone(String phone) async {
     final key = _lastTenDigits(phone);
     if (key == null) return null;
 
-    final contacts = await _load();
-    return contacts[key];
-  }
-
-  static Future<Map<String, String>> _load() async {
-    final cached = _byPhone;
-    if (cached != null) return cached;
-
-    final pending = _pending;
-    if (pending != null) return pending;
-
-    final future = _loadUncached();
-    _pending = future;
-    try {
-      return await future;
-    } finally {
-      _pending = null;
+    final entries = await ContactDirectory.load();
+    for (final entry in entries) {
+      if (_lastTenDigits(entry.number) == key) return entry.name;
     }
-  }
-
-  static Future<Map<String, String>> _loadUncached() async {
-    if (_permissionDenied) return const {};
-
-    try {
-      var status = await FlutterContacts.permissions.check(PermissionType.read);
-      if (status != PermissionStatus.granted && status != PermissionStatus.limited) {
-        status = await FlutterContacts.permissions.request(PermissionType.read);
-      }
-
-      if (status != PermissionStatus.granted && status != PermissionStatus.limited) {
-        _permissionDenied = true;
-        return const {};
-      }
-
-      final contacts = await FlutterContacts.getAll(properties: {ContactProperty.name, ContactProperty.phone});
-
-      final byPhone = <String, String>{};
-      for (final contact in contacts) {
-        final name = contact.displayName?.trim();
-        if (name == null || name.isEmpty) continue;
-
-        for (final phone in contact.phones) {
-          final key = _lastTenDigits(phone.normalizedNumber ?? phone.number);
-          if (key != null) byPhone.putIfAbsent(key, () => name);
-        }
-      }
-
-      _byPhone = byPhone;
-      return byPhone;
-    } catch (_) {
-      // Contacts are a convenience; a failure must not block a payment.
-      return const {};
-    }
+    return null;
   }
 
   /// Normalizes Indian numbers so `+91 98765 43210`, `098765 43210` and

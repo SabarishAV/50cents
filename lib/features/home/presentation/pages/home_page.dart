@@ -9,6 +9,7 @@ import 'package:_50cents/features/auth/data/models/auth_session.dart';
 import 'package:_50cents/features/auth/presentation/providers/auth_provider.dart';
 import 'package:_50cents/features/auth/presentation/widgets/user_avatar.dart';
 import 'package:_50cents/features/home/presentation/widgets/app_bottom_nav.dart';
+import 'package:_50cents/features/payments/presentation/widgets/contact_picker_sheet.dart';
 import 'package:_50cents/features/payments/presentation/widgets/pay_sheet.dart';
 
 /// UPI-style home screen. 50cents does not process payments — each option opens
@@ -36,7 +37,13 @@ class HomePage extends ConsumerWidget {
                         const SizedBox(height: 26),
                         _Greeting(session: session),
                         const SizedBox(height: 22),
-                        _SearchPill(onTap: () => showPaySheet(context, target: PayTarget.phone)),
+                        _SearchPill(
+                          onTap: () async {
+                            final phone = await showContactPicker(context);
+                            if (phone == null || !context.mounted) return;
+                            await showPaySheet(context, target: PayTarget.phone, phone: phone);
+                          },
+                        ),
                         const SizedBox(height: 18),
                         _ScanHeroCard(onTap: () => context.push('/scan')),
                         const SizedBox(height: 14),

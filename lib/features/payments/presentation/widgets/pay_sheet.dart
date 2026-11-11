@@ -12,27 +12,30 @@ import 'package:_50cents/features/payments/data/models/create_payment_record_req
 import 'package:_50cents/features/payments/data/models/payment_category.dart';
 import 'package:_50cents/features/payments/data/payment_repository.dart';
 import 'package:_50cents/features/payments/data/upi_payment.dart';
+import 'package:_50cents/features/payments/presentation/widgets/contact_picker_sheet.dart';
 
 enum PayTarget { phone, upi }
 
 /// Opens the UPI redirect sheet.
 ///
-/// Returns `true` when a UPI app was launched.
-Future<bool> showPaySheet(BuildContext context, {required PayTarget target, UpiPayment? scanned}) async {
+/// Pass [phone] to pre-fill the payee in phone mode (e.g. after picking a
+/// contact). Returns `true` when a UPI app was launched.
+Future<bool> showPaySheet(BuildContext context, {required PayTarget target, UpiPayment? scanned, String? phone}) async {
   final launched = await showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (sheetContext) => _PaySheet(target: target, scanned: scanned),
+    builder: (sheetContext) => _PaySheet(target: target, scanned: scanned, phone: phone),
   );
   return launched ?? false;
 }
 
 class _PaySheet extends ConsumerStatefulWidget {
-  const _PaySheet({required this.target, this.scanned});
+  const _PaySheet({required this.target, this.scanned, this.phone});
 
   final PayTarget target;
   final UpiPayment? scanned;
+  final String? phone;
 
   @override
   ConsumerState<_PaySheet> createState() => _PaySheetState();
@@ -78,7 +81,7 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
   void initState() {
     super.initState();
     final scanned = widget.scanned;
-    _payeeController = TextEditingController(text: scanned?.payeeVpa ?? '');
+    _payeeController = TextEditingController(text: scanned?.payeeVpa ?? widget.phone ?? '');
     _payeeNameController = TextEditingController(text: scanned?.payeeName ?? '');
     _amountController = TextEditingController(text: scanned?.amount ?? '');
     _noteController = TextEditingController(text: scanned?.note ?? '');
@@ -150,6 +153,20 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
     if (_isPhone) return rawPayee.replaceAll(RegExp(r'[^0-9]'), '');
 
     return rawPayee;
+  }
+
+  /// Opens the contact picker and fills the phone field with the chosen
+  /// contact's number (digits only).
+  Future<void> _pickContact() async {
+    final number = await showContactPicker(context);
+    if (!mounted || number == null) return;
+
+    setState(() {
+      _payeeController.text = number;
+      _error = null;
+    });
+    _schedulePrediction();
+    _scheduleContactLookup();
   }
 
   /// Looks up the saved contact name after the phone number stops changing.
@@ -481,14 +498,20 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
                     // toggle below stay editable.
                     readOnly: _isScanned,
                     keyboardType: _isPhone ? TextInputType.phone : TextInputType.emailAddress,
-                    inputFormatters: _isPhone ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9 ]'))] : null,
+                    inputFormatters: _isPhone ? [FilteringTextInputFormatter.digitsOnly] : null,
                     style: const TextStyle(color: AppColors.textPrimary),
                     decoration: appInputDecoration(
                       _isPhone ? 'Phone number' : 'UPI ID',
                       _isPhone ? Icons.phone_outlined : Icons.alternate_email_rounded,
-                      hint: _isPhone ? '98765 43210' : 'name@bank',
+                      hint: _isPhone ? '9876543210' : 'name@bank',
                       suffixIcon: _isScanned
                           ? const Icon(Icons.lock_outline_rounded, color: AppColors.textMuted, size: 20)
+                          : _isPhone
+                          ? IconButton(
+                              tooltip: 'Choose from contacts',
+                              onPressed: _pickContact,
+                              icon: const Icon(Icons.contacts_rounded, color: AppColors.neonBlue, size: 20),
+                            )
                           : null,
                     ),
                     onChanged: (_) {

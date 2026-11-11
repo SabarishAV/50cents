@@ -271,6 +271,9 @@ class _RoundIconButton extends StatelessWidget {
 class _ScanOverlayPainter extends CustomPainter {
   const _ScanOverlayPainter();
 
+  static const _cornerRadius = 24.0;
+  static const _bracketArm = 30.0;
+
   @override
   void paint(Canvas canvas, Size size) {
     final windowSize = size.width.clamp(220.0, 300.0).toDouble();
@@ -279,36 +282,83 @@ class _ScanOverlayPainter extends CustomPainter {
       width: windowSize,
       height: windowSize,
     );
+    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(_cornerRadius));
 
-    final overlay = Paint()..color = Colors.black.withValues(alpha: 0.55);
+    // Dim everything outside the scan window.
+    final overlay = Paint()..color = Colors.black.withValues(alpha: 0.62);
     final path = Path()
       ..addRect(Offset.zero & size)
-      ..addRRect(RRect.fromRectAndRadius(rect, const Radius.circular(26)))
+      ..addRRect(rrect)
       ..fillType = PathFillType.evenOdd;
     canvas.drawPath(path, overlay);
 
-    final border = Paint()
-      ..color = AppColors.neonBlue
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.5;
-    canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(26)), border);
+    // Soft glow so the window feels lit from within.
+    canvas.save();
+    canvas.clipRRect(rrect);
+    final glow = Paint()
+      ..shader = RadialGradient(
+        colors: [AppColors.neonBlue.withValues(alpha: 0.16), Colors.transparent],
+        stops: const [0.0, 0.9],
+      ).createShader(rect);
+    canvas.drawRect(rect, glow);
+    canvas.restore();
 
-    // Corner accents for a more premium scanner look.
+    // Hairline border to define the window edge.
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.16)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2,
+    );
+
+    // Corner brackets that follow the rounded window corners.
     final accent = Paint()
       ..color = AppColors.neonBlueBright
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 4
+      ..strokeWidth = 4.5
       ..strokeCap = StrokeCap.round;
-    const length = 26.0;
-    final r = rect;
-    canvas.drawLine(r.topLeft + const Offset(0, 12), r.topLeft + const Offset(0, 12 + length), accent);
-    canvas.drawLine(r.topLeft + const Offset(12, 0), r.topLeft + const Offset(12 + length, 0), accent);
-    canvas.drawLine(r.topRight + const Offset(0, 12), r.topRight + const Offset(0, 12 + length), accent);
-    canvas.drawLine(r.topRight - const Offset(12, 0), r.topRight - const Offset(12 + length, 0), accent);
-    canvas.drawLine(r.bottomLeft - const Offset(0, 12), r.bottomLeft - const Offset(0, 12 + length), accent);
-    canvas.drawLine(r.bottomLeft + const Offset(12, 0), r.bottomLeft + const Offset(12 + length, 0), accent);
-    canvas.drawLine(r.bottomRight - const Offset(0, 12), r.bottomRight - const Offset(0, 12 + length), accent);
-    canvas.drawLine(r.bottomRight - const Offset(12, 0), r.bottomRight - const Offset(12 + length, 0), accent);
+
+    const r = _cornerRadius;
+    const arm = _bracketArm;
+    const radius = Radius.circular(r);
+
+    // Top-left
+    canvas.drawPath(
+      Path()
+        ..moveTo(rect.left, rect.top + r + arm)
+        ..lineTo(rect.left, rect.top + r)
+        ..arcToPoint(Offset(rect.left + r, rect.top), radius: radius, clockwise: true)
+        ..lineTo(rect.left + r + arm, rect.top),
+      accent,
+    );
+    // Top-right
+    canvas.drawPath(
+      Path()
+        ..moveTo(rect.right, rect.top + r + arm)
+        ..lineTo(rect.right, rect.top + r)
+        ..arcToPoint(Offset(rect.right - r, rect.top), radius: radius, clockwise: false)
+        ..lineTo(rect.right - r - arm, rect.top),
+      accent,
+    );
+    // Bottom-right
+    canvas.drawPath(
+      Path()
+        ..moveTo(rect.right, rect.bottom - r - arm)
+        ..lineTo(rect.right, rect.bottom - r)
+        ..arcToPoint(Offset(rect.right - r, rect.bottom), radius: radius, clockwise: true)
+        ..lineTo(rect.right - r - arm, rect.bottom),
+      accent,
+    );
+    // Bottom-left
+    canvas.drawPath(
+      Path()
+        ..moveTo(rect.left, rect.bottom - r - arm)
+        ..lineTo(rect.left, rect.bottom - r)
+        ..arcToPoint(Offset(rect.left + r, rect.bottom), radius: radius, clockwise: false)
+        ..lineTo(rect.left + r + arm, rect.bottom),
+      accent,
+    );
   }
 
   @override
