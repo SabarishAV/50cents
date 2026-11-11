@@ -60,7 +60,16 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
   Timer? _contactDebounce;
   int _contactRequest = 0;
   bool _lookingUpContact = false;
+
+  /// Contact name auto-filled into the payee name field. Tracks what we
+  /// prefilled so a later lookup replaces or clears it only while the user
+  /// has not typed their own text.
   String? _autoFilledContactName;
+
+  /// Contact name detected for the entered phone number / phone-based VPA.
+  /// Shown in the chip above; editing the payee name field never changes it —
+  /// it only follows the entered number.
+  String? _detectedContactName;
 
   bool get _isPhone => widget.target == PayTarget.phone;
   bool get _isScanned => widget.target == PayTarget.upi && widget.scanned != null;
@@ -76,7 +85,7 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (_recipientName.trim().isNotEmpty) _schedulePrediction();
+      if (_predictionRecipient.trim().isNotEmpty) _schedulePrediction();
       if (_payeeController.text.trim().isNotEmpty) _scheduleContactLookup();
     });
   }
@@ -110,17 +119,35 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
     return Icons.alternate_email_rounded;
   }
 
-  /// Name sent to the payment-record and category-prediction APIs.
-  String get _recipientName {
+  /// The recipient name detected from the scanned QR or the device contacts.
+  ///
+  /// Display-only: editing the payee name field never changes it. It only
+  /// follows the scanned QR or the entered phone number / phone-based VPA.
+  String? get _detectedPayeeName {
+    if (_isScanned) {
+      final fromQr = widget.scanned?.payeeName?.trim();
+      if (fromQr != null && fromQr.isNotEmpty) return fromQr;
+    }
+    return _detectedContactName;
+  }
+
+  /// Icon showing where the detected name came from.
+  IconData get _detectedPayeeIcon {
+    final fromQr = _isScanned ? widget.scanned?.payeeName?.trim() : null;
+    return (fromQr != null && fromQr.isNotEmpty) ? Icons.qr_code_2_rounded : Icons.contacts_rounded;
+  }
+
+  /// Recipient string sent to the category-prediction API: the typed payee
+  /// name, else the detected contact/QR name, else the raw identifier.
+  String get _predictionRecipient {
     final typedName = _payeeNameController.text.trim();
     if (typedName.isNotEmpty) return typedName;
 
-    final rawPayee = _payeeController.text.trim();
+    final detected = _detectedPayeeName;
+    if (detected != null && detected.isNotEmpty) return detected;
 
-    if (_isPhone) {
-      final digits = rawPayee.replaceAll(RegExp(r'[^0-9]'), '');
-      return digits.isEmpty ? '' : 'Mobile $digits';
-    }
+    final rawPayee = _payeeController.text.trim();
+    if (_isPhone) return rawPayee.replaceAll(RegExp(r'[^0-9]'), '');
 
     return rawPayee;
   }
@@ -133,16 +160,18 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
 
     if (phone == null) {
       final autoName = _autoFilledContactName;
-      final shouldClear = autoName != null && _payeeNameController.text.trim() == autoName;
-      if (mounted && (_lookingUpContact || shouldClear)) {
+      final shouldClearField = autoName != null && _payeeNameController.text.trim() == autoName;
+      final hadDetected = _detectedContactName != null;
+      if (mounted && (_lookingUpContact || shouldClearField || hadDetected)) {
         setState(() {
           _lookingUpContact = false;
-          if (shouldClear) {
+          _detectedContactName = null;
+          if (shouldClearField) {
             _payeeNameController.clear();
             _autoFilledContactName = null;
           }
         });
-        if (shouldClear) _schedulePrediction();
+        if (shouldClearField || hadDetected) _schedulePrediction();
       }
       return;
     }
@@ -179,6 +208,9 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
 
     setState(() {
       _lookingUpContact = false;
+      // The detected name shown in the chip follows the entered number only;
+      // user edits to the payee name field never touch it.
+      _detectedContactName = name;
 
       if (name == null) {
         if (current.isNotEmpty && current == _autoFilledContactName) {
@@ -208,7 +240,7 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
   }
 
   Future<void> _predictCategory(int requestId) async {
-    final recipient = _recipientName.trim();
+    final recipient = _predictionRecipient.trim();
     if (recipient.isEmpty) {
       if (mounted && _predicting) setState(() => _predicting = false);
       return;
@@ -268,16 +300,21 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
     final amountText = _amountController.text.trim().replaceAll(',', '');
     final amount = double.parse(amountText);
     final rawPayee = _payeeController.text.trim();
-    final note = _noteController.text.trim();
     // UPI apps display this as the transaction note (`tn` in the intent).
-    final noteForUpi = note.isEmpty ? 'Paid via 50cents' : note;
+    // An empty note is omitted entirely — no default text is injected.
+    final note = _noteController.text.trim();
+    final upiNote = note.isEmpty ? null : note;
     final upiPayeeName = _payeeNameController.text.trim();
+
+    // The record stores who was paid: the identifier (UPI ID or phone
+    // number) plus the optional payee name from the field above.
+    final recipientIdentifier = _isPhone ? rawPayee.replaceAll(RegExp(r'[^0-9]'), '') : rawPayee;
 
     final UpiPayment payment;
     if (_isPhone) {
-      payment = phonePayment(rawPayee, note: noteForUpi, payeeName: upiPayeeName);
+      payment = phonePayment(rawPayee, note: upiNote, payeeName: upiPayeeName);
     } else {
-      payment = UpiPayment(payeeVpa: rawPayee, payeeName: upiPayeeName.isEmpty ? null : upiPayeeName, note: noteForUpi);
+      payment = UpiPayment(payeeVpa: rawPayee, payeeName: upiPayeeName.isEmpty ? null : upiPayeeName, note: upiNote);
     }
 
     final intent = payment.toUri(amountOverride: amount.toStringAsFixed(2));
@@ -303,7 +340,10 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
           .createPaymentRecord(
             CreatePaymentRecordRequest(
               amount: amount,
-              recipientName: _recipientName,
+              // Optional: nothing is sent when the user entered no name.
+              recipientName: upiPayeeName.isEmpty ? null : upiPayeeName,
+              // The UPI ID (or phone number) the payment was sent to.
+              recipientIdentifier: recipientIdentifier,
               note: note,
               // The actual UPI app is picked in the system chooser, so the
               // payment medium is recorded as UPI.
@@ -404,7 +444,7 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
                       ),
                     ],
                   ),
-                  if (_payeeNameController.text.trim().isNotEmpty) ...[
+                  if (_detectedPayeeName != null) ...[
                     const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -423,11 +463,12 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              _payeeNameController.text.trim(),
+                              _detectedPayeeName!,
                               style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
                             ),
                           ),
-                          const Icon(Icons.verified_rounded, color: AppColors.income, size: 16),
+                          const SizedBox(width: 8),
+                          Icon(_detectedPayeeIcon, color: AppColors.neonBlue, size: 16),
                         ],
                       ),
                     ),
@@ -435,6 +476,10 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
                   const SizedBox(height: 22),
                   TextFormField(
                     controller: _payeeController,
+                    // The UPI ID comes straight from the scanned QR and cannot
+                    // be edited; amount, note, category and the bank-balance
+                    // toggle below stay editable.
+                    readOnly: _isScanned,
                     keyboardType: _isPhone ? TextInputType.phone : TextInputType.emailAddress,
                     inputFormatters: _isPhone ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9 ]'))] : null,
                     style: const TextStyle(color: AppColors.textPrimary),
@@ -442,6 +487,9 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
                       _isPhone ? 'Phone number' : 'UPI ID',
                       _isPhone ? Icons.phone_outlined : Icons.alternate_email_rounded,
                       hint: _isPhone ? '98765 43210' : 'name@bank',
+                      suffixIcon: _isScanned
+                          ? const Icon(Icons.lock_outline_rounded, color: AppColors.textMuted, size: 20)
+                          : null,
                     ),
                     onChanged: (_) {
                       if (_error != null) setState(() => _error = null);
@@ -453,6 +501,7 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
                       if (text.isEmpty) {
                         return _isPhone ? 'Please enter a phone number' : 'Please enter a UPI ID';
                       }
+                      if (_isScanned) return null;
                       if (_isPhone) {
                         final digits = text.replaceAll(RegExp(r'[^0-9]'), '');
                         if (digits.length < 10 || digits.length > 13) {
@@ -464,39 +513,44 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _payeeNameController,
-                    maxLength: 255,
-                    textInputAction: TextInputAction.next,
-                    textCapitalization: TextCapitalization.words,
-                    style: const TextStyle(color: AppColors.textPrimary),
-                    decoration:
-                        appInputDecoration(
-                          _isPhone ? 'Payee name' : 'Payee name (optional)',
-                          Icons.person_outline_rounded,
-                          hint: _isPhone ? 'From your contacts' : 'Name shown in your UPI app',
-                        ).copyWith(
-                          counterText: '',
-                          suffixIcon: _lookingUpContact
-                              ? const Padding(
-                                  padding: EdgeInsets.only(right: 14),
-                                  child: SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(strokeWidth: 1.6, color: AppColors.neonBlue),
-                                  ),
-                                )
-                              : null,
-                        ),
-                    onChanged: (_) {
-                      _autoFilledContactName = null;
-                      setState(() {
-                        if (_error != null) _error = null;
-                      });
-                      _schedulePrediction();
-                    },
-                  ),
+                  // The scanned QR already carries the payee name (`pn`), shown
+                  // in the chip above, so the editable name field is hidden in
+                  // the scanned flow.
+                  if (!_isScanned) ...[
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _payeeNameController,
+                      maxLength: 255,
+                      textInputAction: TextInputAction.next,
+                      textCapitalization: TextCapitalization.words,
+                      style: const TextStyle(color: AppColors.textPrimary),
+                      decoration:
+                          appInputDecoration(
+                            _isPhone ? 'Payee name' : 'Payee name (optional)',
+                            Icons.person_outline_rounded,
+                            hint: _isPhone ? 'From your contacts' : 'Name shown in your UPI app',
+                          ).copyWith(
+                            counterText: '',
+                            suffixIcon: _lookingUpContact
+                                ? const Padding(
+                                    padding: EdgeInsets.only(right: 14),
+                                    child: SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(strokeWidth: 1.6, color: AppColors.neonBlue),
+                                    ),
+                                  )
+                                : null,
+                          ),
+                      onChanged: (_) {
+                        _autoFilledContactName = null;
+                        setState(() {
+                          if (_error != null) _error = null;
+                        });
+                        _schedulePrediction();
+                      },
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _amountController,
