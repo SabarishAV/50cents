@@ -3,12 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:_50cents/core/theme/app_colors.dart';
+import 'package:_50cents/core/theme/app_inputs.dart';
 import 'package:_50cents/core/widgets/neon_background.dart';
 import 'package:_50cents/core/widgets/neon_button.dart';
 import 'package:_50cents/features/payments/data/models/payment_record.dart';
 import 'package:_50cents/features/payments/data/payment_repository.dart';
 
 const List<String> _transactionTypes = <String>['ALL', 'DEBIT', 'CREDIT'];
+
+enum _FilterMode { thisMonth, last3Months, last6Months }
 
 /// Payment history screen backed by `GET /payment-records`.
 class PaymentHistoryPage extends ConsumerStatefulWidget {
@@ -25,7 +28,7 @@ class _PaymentHistoryPageState extends ConsumerState<PaymentHistoryPage> {
   int _fromMonth = DateTime.now().month;
   int _toYear = DateTime.now().year;
   int _toMonth = DateTime.now().month;
-  bool _onlyThisMonth = true;
+  _FilterMode _filterMode = _FilterMode.thisMonth;
   String _transactionType = 'ALL';
   int _pageNumber = 1;
 
@@ -34,7 +37,7 @@ class _PaymentHistoryPageState extends ConsumerState<PaymentHistoryPage> {
     month: _fromMonth,
     toYear: _toYear,
     toMonth: _toMonth,
-    onlyThisMonth: _onlyThisMonth,
+    onlyThisMonth: _filterMode == _FilterMode.thisMonth,
     transactionType: _transactionType == 'ALL' ? null : _transactionType,
     pageNumber: _pageNumber,
     pageSize: _pageSize,
@@ -78,13 +81,13 @@ class _PaymentHistoryPageState extends ConsumerState<PaymentHistoryPage> {
               children: [
                 _FilterBar(
                   transactionType: _transactionType,
-                  onlyThisMonth: _onlyThisMonth,
+                  filterMode: _filterMode,
                   fromYear: _fromYear,
                   fromMonth: _fromMonth,
                   toYear: _toYear,
                   toMonth: _toMonth,
                   onTransactionTypeChanged: _setTransactionType,
-                  onOnlyThisMonthChanged: _setOnlyThisMonth,
+                  onFilterModeChanged: _setFilterMode,
                   onMonthChanged: _handleMonthChange,
                 ),
                 const SizedBox(height: 18),
@@ -101,8 +104,13 @@ class _PaymentHistoryPageState extends ConsumerState<PaymentHistoryPage> {
                     actionLabel: 'Retry',
                     onAction: () => ref.invalidate(paymentRecordsProvider(_query)),
                   ),
-                  data: (page) =>
-                      page.data.isEmpty ? const _EmptyPaymentsState() : _RecordsList(page: page, onLoadMore: _loadMore),
+                  data: (page) => page.data.isEmpty
+                      ? const _EmptyPaymentsState()
+                      : _RecordsList(
+                          page: page,
+                          onLoadMore: _loadMore,
+                          onRecordChanged: () => ref.invalidate(paymentRecordsProvider(_query)),
+                        ),
                 ),
               ],
             ),
@@ -119,17 +127,40 @@ class _PaymentHistoryPageState extends ConsumerState<PaymentHistoryPage> {
     });
   }
 
-  void _setOnlyThisMonth(bool value) {
+  void _setFilterMode(_FilterMode mode) {
     setState(() {
-      _onlyThisMonth = value;
-      if (value) {
-        final now = DateTime.now();
-        _fromYear = now.year;
-        _fromMonth = now.month;
-        _toYear = now.year;
-        _toMonth = now.month;
-      }
+      _filterMode = mode;
       _pageNumber = 1;
+      final now = DateTime.now();
+      switch (mode) {
+        case _FilterMode.thisMonth:
+          _fromYear = now.year;
+          _fromMonth = now.month;
+          _toYear = now.year;
+          _toMonth = now.month;
+        case _FilterMode.last3Months:
+          _toYear = now.year;
+          _toMonth = now.month;
+          var from = now.month - 2;
+          var fromYear = now.year;
+          while (from <= 0) {
+            from += 12;
+            fromYear -= 1;
+          }
+          _fromYear = fromYear;
+          _fromMonth = from;
+        case _FilterMode.last6Months:
+          _toYear = now.year;
+          _toMonth = now.month;
+          var from = now.month - 5;
+          var fromYear = now.year;
+          while (from <= 0) {
+            from += 12;
+            fromYear -= 1;
+          }
+          _fromYear = fromYear;
+          _fromMonth = from;
+      }
     });
   }
 
@@ -157,25 +188,25 @@ class _PaymentHistoryPageState extends ConsumerState<PaymentHistoryPage> {
 class _FilterBar extends StatelessWidget {
   const _FilterBar({
     required this.transactionType,
-    required this.onlyThisMonth,
+    required this.filterMode,
     required this.fromYear,
     required this.fromMonth,
     required this.toYear,
     required this.toMonth,
     required this.onTransactionTypeChanged,
-    required this.onOnlyThisMonthChanged,
+    required this.onFilterModeChanged,
     required this.onMonthChanged,
   });
 
   final String transactionType;
-  final bool onlyThisMonth;
+  final _FilterMode filterMode;
   final int fromYear;
   final int fromMonth;
   final int toYear;
   final int toMonth;
 
   final ValueChanged<String> onTransactionTypeChanged;
-  final ValueChanged<bool> onOnlyThisMonthChanged;
+  final ValueChanged<_FilterMode> onFilterModeChanged;
   final void Function(int, bool) onMonthChanged;
 
   @override
@@ -195,12 +226,10 @@ class _FilterBar extends StatelessWidget {
             style: TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5),
           ),
           const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          Column(
             children: [
               for (final type in _transactionTypes)
-                _TypeChip(
+                _TypeRow(
                   label: type == 'ALL'
                       ? 'All'
                       : type == 'DEBIT'
@@ -212,69 +241,65 @@ class _FilterBar extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 18),
+          const Text(
+            'Period',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            children: [
+              _FilterRadio(
+                label: 'This month',
+                value: _FilterMode.thisMonth,
+                groupValue: filterMode,
+                onChanged: onFilterModeChanged,
+              ),
+              _FilterRadio(
+                label: 'Last 3 months',
+                value: _FilterMode.last3Months,
+                groupValue: filterMode,
+                onChanged: onFilterModeChanged,
+              ),
+              _FilterRadio(
+                label: 'Last 6 months',
+                value: _FilterMode.last6Months,
+                groupValue: filterMode,
+                onChanged: onFilterModeChanged,
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
           Row(
             children: [
               Expanded(
-                child: Text(
-                  'Date range',
-                  style: const TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5,
-                  ),
+                child: _MonthPickerField(
+                  label: 'From',
+                  year: fromYear,
+                  month: fromMonth,
+                  onChanged: (key) => onMonthChanged(key, false),
                 ),
               ),
               const SizedBox(width: 10),
-              Container(
-                decoration: BoxDecoration(
-                  color: onlyThisMonth
-                      ? AppColors.neonBlue.withValues(alpha: 0.15)
-                      : AppColors.background.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: onlyThisMonth ? AppColors.neonBlue.withValues(alpha: 0.6) : AppColors.border,
-                  ),
-                ),
-                child: Switch(
-                  value: onlyThisMonth,
-                  onChanged: onOnlyThisMonthChanged,
-                  activeThumbColor: AppColors.neonBlue,
-                  activeTrackColor: AppColors.neonBlue.withValues(alpha: 0.35),
-                  inactiveThumbColor: AppColors.textMuted,
-                  inactiveTrackColor: AppColors.border,
+              Expanded(
+                child: _MonthPickerField(
+                  label: 'To',
+                  year: toYear,
+                  month: toMonth,
+                  onChanged: (key) => onMonthChanged(key, true),
                 ),
               ),
             ],
           ),
-          if (!onlyThisMonth) ...[
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: _MonthField(
-                    label: 'From',
-                    year: fromYear,
-                    month: fromMonth,
-                    isTo: false,
-                    onChanged: onMonthChanged,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _MonthField(label: 'To', year: toYear, month: toMonth, isTo: true, onChanged: onMonthChanged),
-                ),
-              ],
-            ),
-          ],
         ],
       ),
     );
   }
 }
 
-class _TypeChip extends StatelessWidget {
-  const _TypeChip({required this.label, required this.selected, required this.onTap});
+class _TypeRow extends StatelessWidget {
+  const _TypeRow({required this.label, required this.selected, required this.onTap});
 
   final String label;
   final bool selected;
@@ -283,26 +308,51 @@ class _TypeChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? AppColors.neonBlue.withValues(alpha: 0.12) : AppColors.background.withValues(alpha: 0.55),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: selected ? AppColors.neonBlue.withValues(alpha: 0.55) : AppColors.border),
-        ),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 16),
-            alignment: Alignment.center,
-            child: Text(
-              label,
-              style: TextStyle(
-                color: selected ? AppColors.neonBlueBright : AppColors.textMuted,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 16),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.neonBlue.withValues(alpha: 0.12) : null,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: selected ? AppColors.neonBlue.withValues(alpha: 0.55) : AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 16,
+                height: 16,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: selected ? AppColors.neonBlue : Colors.transparent,
+                  border: Border.all(color: selected ? AppColors.neonBlue : AppColors.textMuted, width: 2),
+                ),
+                child: selected
+                    ? const Center(
+                        child: SizedBox(
+                          width: 8,
+                          height: 8,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                          ),
+                        ),
+                      )
+                    : null,
               ),
-            ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: selected ? AppColors.neonBlueBright : AppColors.textPrimary,
+                    fontSize: 13,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -310,20 +360,74 @@ class _TypeChip extends StatelessWidget {
   }
 }
 
-class _MonthField extends StatelessWidget {
-  const _MonthField({
-    required this.label,
-    required this.year,
-    required this.month,
-    required this.isTo,
-    required this.onChanged,
-  });
+class _FilterRadio extends StatelessWidget {
+  const _FilterRadio({required this.label, required this.value, required this.groupValue, required this.onChanged});
+
+  final String label;
+  final _FilterMode value;
+  final _FilterMode groupValue;
+  final ValueChanged<_FilterMode> onChanged;
+
+  bool get _selected => value == groupValue;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () => onChanged(value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: _selected ? AppColors.neonBlue.withValues(alpha: 0.12) : AppColors.background.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: _selected ? AppColors.neonBlue.withValues(alpha: 0.6) : AppColors.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 16,
+              height: 16,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _selected ? AppColors.neonBlue : Colors.transparent,
+                border: Border.all(color: _selected ? AppColors.neonBlue : AppColors.textMuted, width: 2),
+              ),
+              child: _selected
+                  ? const Center(
+                      child: SizedBox(
+                        width: 8,
+                        height: 8,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                        ),
+                      ),
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: _selected ? AppColors.neonBlueBright : AppColors.textPrimary,
+                fontSize: 13,
+                fontWeight: _selected ? FontWeight.w700 : FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MonthPickerField extends StatelessWidget {
+  const _MonthPickerField({required this.label, required this.year, required this.month, required this.onChanged});
 
   final String label;
   final int year;
   final int month;
-  final bool isTo;
-  final void Function(int, bool) onChanged;
+  final ValueChanged<int> onChanged;
 
   static const List<String> _monthNames = <String>[
     'Jan',
@@ -340,21 +444,6 @@ class _MonthField extends StatelessWidget {
     'Dec',
   ];
 
-  int get _value => year * 12 + month;
-
-  List<DropdownMenuItem<int>> get _items {
-    final now = DateTime.now();
-    final years = List<int>.generate(8, (index) => now.year - 5 + index);
-    return <DropdownMenuItem<int>>[
-      for (final yearValue in years)
-        for (final monthValue in List<int>.generate(12, (index) => index + 1))
-          DropdownMenuItem<int>(
-            value: yearValue * 12 + monthValue,
-            child: Text('${_monthNames[monthValue - 1]} $yearValue'),
-          ),
-    ];
-  }
-
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -370,20 +459,142 @@ class _MonthField extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        DropdownButtonHideUnderline(
-          child: DropdownButton<int>(
-            value: _value,
-            isExpanded: true,
-            items: _items,
-            onChanged: (key) {
-              if (key != null) {
-                onChanged(key, isTo);
-              }
-            },
-            style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
-            dropdownColor: AppColors.surface,
-            borderRadius: BorderRadius.circular(12),
-            icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textMuted, size: 18),
+        InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _showMonthPicker(context),
+          child: InputDecorator(
+            decoration: appInputDecoration('', Icons.calendar_month_rounded),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    '${_monthNames[month - 1]} $year',
+                    style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textMuted, size: 18),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showMonthPicker(BuildContext context) {
+    showDialog<int>(
+      context: context,
+      builder: (dialogContext) => _MonthPickerDialog(
+        year: year,
+        month: month,
+        onChanged: (key) {
+          Navigator.of(dialogContext).pop(key);
+          onChanged(key);
+        },
+      ),
+    );
+  }
+}
+
+class _MonthPickerDialog extends StatefulWidget {
+  const _MonthPickerDialog({required this.year, required this.month, required this.onChanged});
+
+  final int year;
+  final int month;
+  final ValueChanged<int> onChanged;
+
+  @override
+  State<_MonthPickerDialog> createState() => _MonthPickerDialogState();
+}
+
+class _MonthPickerDialogState extends State<_MonthPickerDialog> {
+  late int _year;
+  late int _month;
+
+  static const List<String> _monthNames = <String>[
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _year = widget.year;
+    _month = widget.month;
+  }
+
+  int get _value => _year * 12 + _month;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppColors.surface,
+      titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text(
+            'Select month',
+            style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w700),
+          ),
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.chevron_left_rounded, color: AppColors.neonBlue, size: 24),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: () => setState(() => _year -= 1),
+              ),
+              Text(
+                '$_year',
+                style: const TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+              IconButton(
+                icon: const Icon(Icons.chevron_right_rounded, color: AppColors.neonBlue, size: 24),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: () => setState(() => _year += 1),
+              ),
+            ],
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 320,
+        child: GridView.count(
+          shrinkWrap: true,
+          crossAxisCount: 4,
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: 1.2,
+          children: [
+            for (final m in List<int>.generate(12, (i) => i + 1))
+              _MonthChip(name: _monthNames[m - 1], selected: m == _month, onTap: () => setState(() => _month = m)),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel', style: TextStyle(color: AppColors.textMuted)),
+        ),
+        TextButton(
+          onPressed: () => widget.onChanged(_value),
+          child: const Text(
+            'OK',
+            style: TextStyle(color: AppColors.neonBlue, fontWeight: FontWeight.w700),
           ),
         ),
       ],
@@ -391,11 +602,46 @@ class _MonthField extends StatelessWidget {
   }
 }
 
+class _MonthChip extends StatelessWidget {
+  const _MonthChip({required this.name, required this.selected, required this.onTap});
+
+  final String name;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? AppColors.neonBlue : AppColors.background.withValues(alpha: 0.5),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: selected ? AppColors.neonBlue : AppColors.border),
+          ),
+          child: Text(
+            name,
+            style: TextStyle(
+              color: selected ? Colors.black : AppColors.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _RecordsList extends StatelessWidget {
-  const _RecordsList({required this.page, required this.onLoadMore});
+  const _RecordsList({required this.page, required this.onLoadMore, this.onRecordChanged});
 
   final PaymentRecordsPage page;
   final VoidCallback onLoadMore;
+  final VoidCallback? onRecordChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -405,7 +651,7 @@ class _RecordsList extends StatelessWidget {
         for (final record in page.data)
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
-            child: _PaymentRecordTile(record: record),
+            child: _PaymentRecordTile(record: record, onRecordChanged: onRecordChanged),
           ),
         if (page.hasNext) _LoadMore(onPressed: onLoadMore),
       ],
@@ -414,9 +660,10 @@ class _RecordsList extends StatelessWidget {
 }
 
 class _PaymentRecordTile extends StatelessWidget {
-  const _PaymentRecordTile({required this.record});
+  const _PaymentRecordTile({required this.record, this.onRecordChanged});
 
   final PaymentRecord record;
+  final VoidCallback? onRecordChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -424,7 +671,19 @@ class _PaymentRecordTile extends StatelessWidget {
 
     return InkWell(
       borderRadius: BorderRadius.circular(16),
-      onTap: () => context.push('/payment-records/${record.id}'),
+      onTap: () async {
+        final deleted = await context.push<bool>('/payment-records/${record.id}');
+        if (deleted == true && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Payment deleted.', style: TextStyle(color: AppColors.textPrimary)),
+              backgroundColor: AppColors.income,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          onRecordChanged?.call();
+        }
+      },
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(14),

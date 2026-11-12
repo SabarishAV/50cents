@@ -7,9 +7,12 @@ import 'package:_50cents/core/theme/app_colors.dart';
 import 'package:_50cents/core/theme/app_inputs.dart';
 import 'package:_50cents/core/widgets/neon_background.dart';
 import 'package:_50cents/core/widgets/neon_button.dart';
+import 'package:_50cents/features/payments/data/contact_lookup.dart';
+import 'package:_50cents/features/payments/data/models/payment_category.dart';
 import 'package:_50cents/features/payments/data/models/payment_record.dart';
 import 'package:_50cents/features/payments/data/models/update_payment_record_request.dart';
 import 'package:_50cents/features/payments/data/payment_repository.dart';
+import 'package:_50cents/features/payments/presentation/widgets/contact_picker_sheet.dart';
 
 /// Elaborated details for a single payment record (`GET /payment-records/:id`).
 ///
@@ -326,11 +329,13 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
   late final TextEditingController _recipientNameController;
   late final TextEditingController _recipientIdentifierController;
   late final TextEditingController _paymentMediumController;
-  late final TextEditingController _transactionTypeController;
-  late final TextEditingController _categoryController;
 
   bool _submitting = false;
-  bool _updateBankBalance = false;
+  String? _submitMessage;
+  bool _submitError = false;
+  String? _selectedCategoryCode;
+  String? _selectedType;
+  String? _contactNameForIdentifier;
 
   static const List<String> _types = <String>['DEBIT', 'CREDIT'];
 
@@ -343,9 +348,17 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
     _recipientNameController = TextEditingController(text: r.recipientName);
     _recipientIdentifierController = TextEditingController(text: r.recipientIdentifier ?? '');
     _paymentMediumController = TextEditingController(text: r.paymentMedium);
-    _transactionTypeController = TextEditingController(text: r.transactionType);
-    _categoryController = TextEditingController(text: r.category.name);
-    _updateBankBalance = r.bankUpdated;
+    _selectedCategoryCode = r.category.code.isNotEmpty ? r.category.code : null;
+    _selectedType = r.transactionType.trim().toUpperCase();
+    _lookupIdentifierContactName();
+  }
+
+  Future<void> _lookupIdentifierContactName() async {
+    final identifier = _recipientIdentifierController.text.trim();
+    if (identifier.isEmpty) return;
+    final name = await ContactNameLookup.nameForPhone(identifier);
+    if (!mounted) return;
+    setState(() => _contactNameForIdentifier = name);
   }
 
   @override
@@ -355,8 +368,6 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
     _recipientNameController.dispose();
     _recipientIdentifierController.dispose();
     _paymentMediumController.dispose();
-    _transactionTypeController.dispose();
-    _categoryController.dispose();
     super.dispose();
   }
 
@@ -364,7 +375,11 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     FocusScope.of(context).unfocus();
 
-    setState(() => _submitting = true);
+    setState(() {
+      _submitting = true;
+      _submitMessage = null;
+      _submitError = false;
+    });
 
     try {
       await ref
@@ -376,9 +391,7 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
               paymentMedium: _paymentMediumController.text.trim().isNotEmpty
                   ? _paymentMediumController.text.trim()
                   : null,
-              transactionType: _transactionTypeController.text.trim().isNotEmpty
-                  ? _transactionTypeController.text.trim()
-                  : null,
+              transactionType: _selectedType,
               recipientName: _recipientNameController.text.trim().isNotEmpty
                   ? _recipientNameController.text.trim()
                   : null,
@@ -386,28 +399,162 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
                   ? _recipientIdentifierController.text.trim()
                   : null,
               note: _noteController.text.trim().isNotEmpty ? _noteController.text.trim() : null,
-              category: _categoryController.text.trim().isNotEmpty ? _categoryController.text.trim() : null,
-              updateBankBalance: _updateBankBalance,
+              category: _selectedCategoryCode != null && _selectedCategoryCode!.isNotEmpty
+                  ? _selectedCategoryCode
+                  : null,
+              updateBankBalance: widget.record.bankUpdated,
             ),
           );
       if (!mounted) return;
-      Navigator.of(context).pop(true);
+      setState(() {
+        _submitting = false;
+        _submitMessage = 'Payment updated.';
+        _submitError = false;
+      });
+      Future.delayed(const Duration(milliseconds: 600), () {
+        if (mounted) Navigator.of(context).pop(true);
+      });
     } catch (error) {
       if (!mounted) return;
-      setState(() => _submitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(apiErrorMessage(error), style: const TextStyle(color: AppColors.textPrimary)),
-          backgroundColor: AppColors.expense,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      setState(() {
+        _submitting = false;
+        _submitMessage = apiErrorMessage(error);
+        _submitError = true;
+      });
     }
+  }
+
+  Widget _buildCategoryDropdown(AsyncValue<List<PaymentCategory>> categories) {
+    return categories.when(
+      loading: () => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppColors.background.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: const Row(
+          children: [
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 1.6, color: AppColors.neonBlue),
+            ),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text('Loading categories...', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+            ),
+          ],
+        ),
+      ),
+      error: (error, _) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppColors.background.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.category_outlined, color: AppColors.textMuted, size: 18),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text('Could not load categories.', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+            ),
+            TextButton(
+              onPressed: () => ref.invalidate(categoriesProvider),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.neonBlue,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text('Retry', style: TextStyle(fontSize: 12)),
+            ),
+          ],
+        ),
+      ),
+      data: (list) {
+        PaymentCategory? selected;
+        for (final category in list) {
+          if (category.code == _selectedCategoryCode) {
+            selected = category;
+            break;
+          }
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            InputDecorator(
+              decoration: appInputDecoration(
+                'Category',
+                Icons.category_outlined,
+              ).copyWith(contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5)),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: selected?.code,
+                  isExpanded: true,
+                  isDense: true,
+                  dropdownColor: AppColors.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textMuted),
+                  hint: const Text('Select category', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                  items: [
+                    for (final category in list)
+                      DropdownMenuItem<String>(
+                        value: category.code,
+                        child: Text(category.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ),
+                  ],
+                  onChanged: (value) => setState(() => _selectedCategoryCode = value),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildTypeDropdown() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InputDecorator(
+          decoration: appInputDecoration(
+            'Type',
+            Icons.swap_horiz_rounded,
+          ).copyWith(contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5)),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: _selectedType,
+              isExpanded: true,
+              isDense: true,
+              dropdownColor: AppColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textMuted),
+              hint: const Text('Select type', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+              style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+              items: [
+                for (final type in _types)
+                  DropdownMenuItem<String>(
+                    value: type,
+                    child: Text(type == 'DEBIT' ? 'Debit' : 'Credit', maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ),
+              ],
+              onChanged: (value) => setState(() => _selectedType = value),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final categories = ref.watch(categoriesProvider);
 
     return Padding(
       padding: EdgeInsets.only(bottom: bottomInset),
@@ -444,13 +591,13 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
                     'Edit the fields you want to change and save.',
                     style: TextStyle(color: AppColors.textMuted, fontSize: 12, height: 1.35),
                   ),
-                  const SizedBox(height: 22),
+                  const SizedBox(height: 18),
                   _InputField(
                     controller: _amountController,
                     label: 'Amount',
                     icon: Icons.currency_rupee_rounded,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9\.]'))],
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}$'))],
                     validator: (value) {
                       final text = value?.trim().replaceAll(',', '') ?? '';
                       if (text.isEmpty) return 'Please enter an amount';
@@ -459,41 +606,67 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   _InputField(
                     controller: _recipientNameController,
                     label: 'Payee name',
                     icon: Icons.person_outline_rounded,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
+                  if (_contactNameForIdentifier != null && _contactNameForIdentifier!.trim().isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppColors.neonBlue.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.neonBlue.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.person_outline_rounded, color: AppColors.neonBlue, size: 12),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Contact: $_contactNameForIdentifier',
+                            style: const TextStyle(
+                              color: AppColors.neonBlueBright,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 8),
                   _InputField(
                     controller: _recipientIdentifierController,
                     label: 'Identifier (UPI ID / phone)',
                     icon: Icons.alternate_email_rounded,
+                    suffixIcon: IconButton(
+                      tooltip: 'Choose from contacts',
+                      onPressed: () async {
+                        final number = await showContactPicker(context);
+                        if (!mounted || number == null) return;
+                        _recipientIdentifierController.text = number;
+                        _lookupIdentifierContactName();
+                      },
+                      icon: const Icon(Icons.contacts_rounded, color: AppColors.neonBlue, size: 20),
+                    ),
+                    onChanged: (_) => _lookupIdentifierContactName(),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   _InputField(
                     controller: _paymentMediumController,
                     label: 'Payment medium',
                     icon: Icons.payment_rounded,
                   ),
-                  const SizedBox(height: 16),
-                  _InputField(
-                    controller: _transactionTypeController,
-                    label: 'Type',
-                    icon: Icons.swap_horiz_rounded,
-                    validator: (value) {
-                      final text = value?.trim().toUpperCase() ?? '';
-                      if (text.isEmpty) return 'Please enter a type';
-                      if (!_types.contains(text)) return 'Use DEBIT or CREDIT';
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  _InputField(controller: _categoryController, label: 'Category', icon: Icons.category_outlined),
-                  const SizedBox(height: 16),
-                  _InputField(controller: _noteController, label: 'Note', icon: Icons.notes_rounded, maxLines: 2),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
+                  _buildTypeDropdown(),
+                  const SizedBox(height: 14),
+                  _buildCategoryDropdown(categories),
+                  const SizedBox(height: 14),
+                  _InputField(controller: _noteController, label: 'Note', icon: Icons.notes_rounded, maxLines: 1),
+                  const SizedBox(height: 14),
                   Container(
                     decoration: BoxDecoration(
                       color: AppColors.background.withValues(alpha: 0.35),
@@ -501,23 +674,58 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
                       border: Border.all(color: AppColors.border),
                     ),
                     child: CheckboxListTile(
-                      value: _updateBankBalance,
-                      onChanged: (value) => setState(() => _updateBankBalance = value ?? false),
+                      value: widget.record.bankUpdated,
+                      onChanged: null,
                       dense: true,
                       contentPadding: const EdgeInsets.symmetric(horizontal: 6),
                       controlAffinity: ListTileControlAffinity.leading,
-                      activeColor: AppColors.neonBlue,
+                      activeColor: AppColors.income,
                       checkColor: Colors.black,
                       title: const Text(
                         'Update bank balance',
-                        style: TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
+                        style: TextStyle(color: AppColors.textMuted, fontSize: 13, fontWeight: FontWeight.w600),
                       ),
                       subtitle: const Text(
-                        'Add this payment to your tracked bank balance.',
+                        'Cannot be changed from here.',
                         style: TextStyle(color: AppColors.textMuted, fontSize: 11.5, height: 1.35),
                       ),
                     ),
                   ),
+                  if (_submitMessage != null) ...[
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: _submitError
+                            ? AppColors.expense.withValues(alpha: 0.1)
+                            : AppColors.income.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: (_submitError ? AppColors.expense : AppColors.income).withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _submitError ? Icons.error_outline_rounded : Icons.check_circle_rounded,
+                            color: _submitError ? AppColors.expense : AppColors.income,
+                            size: 17,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _submitMessage!,
+                              style: TextStyle(
+                                color: _submitError ? AppColors.expense : AppColors.income,
+                                fontSize: 12,
+                                height: 1.35,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 20),
                   NeonButton(
                     label: 'Save changes',
@@ -545,6 +753,8 @@ class _InputField extends StatelessWidget {
     this.inputFormatters,
     this.validator,
     this.maxLines = 1,
+    this.suffixIcon,
+    this.onChanged,
   });
 
   final TextEditingController controller;
@@ -554,6 +764,8 @@ class _InputField extends StatelessWidget {
   final List<TextInputFormatter>? inputFormatters;
   final String? Function(String?)? validator;
   final int maxLines;
+  final Widget? suffixIcon;
+  final ValueChanged<String>? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -563,8 +775,9 @@ class _InputField extends StatelessWidget {
       inputFormatters: inputFormatters,
       maxLines: maxLines,
       style: const TextStyle(color: AppColors.textPrimary),
-      decoration: appInputDecoration(label, icon),
+      decoration: appInputDecoration(label, icon).copyWith(suffixIcon: suffixIcon),
       validator: validator,
+      onChanged: onChanged,
     );
   }
 }
