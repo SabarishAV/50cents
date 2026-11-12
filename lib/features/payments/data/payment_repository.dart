@@ -6,6 +6,7 @@ import 'package:_50cents/core/network/api_exception.dart';
 
 import 'models/create_payment_record_request.dart';
 import 'models/payment_category.dart';
+import 'models/payment_record.dart';
 
 final paymentRepositoryProvider = Provider<PaymentRepository>((ref) {
   return PaymentRepository(ref.read(dioProvider));
@@ -14,6 +15,64 @@ final paymentRepositoryProvider = Provider<PaymentRepository>((ref) {
 /// Categories are cached for the session so opening the pay sheet is instant.
 final categoriesProvider = FutureProvider<List<PaymentCategory>>((ref) async {
   return ref.watch(paymentRepositoryProvider).listCategories();
+});
+
+/// Filters and paging for `GET /payment-records`.
+class PaymentRecordsQuery {
+  const PaymentRecordsQuery({
+    required this.year,
+    required this.month,
+    required this.toYear,
+    required this.toMonth,
+    required this.onlyThisMonth,
+    required this.transactionType,
+    required this.pageNumber,
+    required this.pageSize,
+  });
+
+  /// Calendar year the payment activity starts from.
+  final int year;
+
+  /// Calendar month (1–12) the payment activity starts from.
+  final int month;
+
+  /// Calendar year the payment activity ends at.
+  final int toYear;
+
+  /// Calendar month (1–12) the payment activity ends at.
+  final int toMonth;
+
+  /// When true the range collapses to the current calendar month.
+  final bool onlyThisMonth;
+
+  /// `DEBIT`, `CREDIT` or null to return both.
+  final String? transactionType;
+
+  final int pageNumber;
+  final int pageSize;
+
+  Map<String, dynamic> toQueryParameters() {
+    final params = <String, dynamic>{
+      'year': year,
+      'month': month,
+      'toYear': toYear,
+      'toMonth': toMonth,
+      'onlyThisMonth': onlyThisMonth ? 'true' : 'false',
+      'pageNumber': pageNumber,
+      'pageSize': pageSize,
+    };
+
+    if (transactionType != null && transactionType!.isNotEmpty) {
+      params['transactionType'] = transactionType;
+    }
+
+    return params;
+  }
+}
+
+/// A page of payment records for the requested filters.
+final paymentRecordsProvider = FutureProvider.family<PaymentRecordsPage, PaymentRecordsQuery>((ref, query) {
+  return ref.read(paymentRepositoryProvider).listPaymentRecords(query);
 });
 
 /// Data layer for payment records and category lookup.
@@ -64,6 +123,18 @@ class PaymentRepository {
         .map((value) => value.trim())
         .where((value) => value.isNotEmpty)
         .toList(growable: false);
+  }
+
+  /// GET /payment-records
+  Future<PaymentRecordsPage> listPaymentRecords(PaymentRecordsQuery query) async {
+    final response = await _dio.get<dynamic>('/payment-records', queryParameters: query.toQueryParameters());
+    final payload = response.data;
+
+    if (payload is! Map) {
+      throw ApiException('Unexpected response from the server.');
+    }
+
+    return PaymentRecordsPage.fromJson(Map<String, dynamic>.from(payload), fallbackPageNumber: query.pageNumber);
   }
 
   /// POST /payment-records

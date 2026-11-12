@@ -69,6 +69,8 @@ class HomePage extends ConsumerWidget {
                           ],
                         ),
                         const SizedBox(height: 22),
+                        _HistoryTile(onTap: () => context.push('/payment-records')),
+                        const SizedBox(height: 14),
                         const _RedirectNote(),
                         const SizedBox(height: 18),
                         const _HowItWorks(),
@@ -333,6 +335,64 @@ class _ActionCard extends StatelessWidget {
               ),
               const SizedBox(height: 3),
               Text(subtitle, style: const TextStyle(color: AppColors.textMuted, fontSize: 11.5)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HistoryTile extends StatelessWidget {
+  const _HistoryTile({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: AppColors.neonBlue.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(13),
+                  border: Border.all(color: AppColors.neonBlue.withValues(alpha: 0.24)),
+                ),
+                child: Icon(Icons.receipt_long_rounded, color: AppColors.neonBlue, size: 20),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Payment history',
+                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Your past payments and bank updates',
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 11.5),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted, size: 20),
             ],
           ),
         ),
