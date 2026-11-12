@@ -56,7 +56,7 @@ class _PaymentHistoryPageState extends ConsumerState<PaymentHistoryPage> {
             onPressed: () => context.pop(),
           ),
           title: const Text(
-            'Payment records',
+            'Payment History',
             style: TextStyle(
               color: AppColors.textPrimary,
               fontSize: 19,
@@ -76,10 +76,6 @@ class _PaymentHistoryPageState extends ConsumerState<PaymentHistoryPage> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
               children: [
-                if (recordsState.hasValue) ...[
-                  _SummaryCard(records: recordsState.value!.data, transactionType: _transactionType),
-                  const SizedBox(height: 16),
-                ],
                 _FilterBar(
                   transactionType: _transactionType,
                   onlyThisMonth: _onlyThisMonth,
@@ -139,12 +135,15 @@ class _PaymentHistoryPageState extends ConsumerState<PaymentHistoryPage> {
 
   void _handleMonthChange(int key, bool isTo) {
     setState(() {
+      final decoded = key - 1;
+      final year = decoded ~/ 12;
+      final month = decoded % 12 + 1;
       if (isTo) {
-        _toYear = key ~/ 12;
-        _toMonth = key % 12;
+        _toYear = year;
+        _toMonth = month;
       } else {
-        _fromYear = key ~/ 12;
-        _fromMonth = key % 12;
+        _fromYear = year;
+        _fromMonth = month;
       }
       _pageNumber = 1;
     });
@@ -152,77 +151,6 @@ class _PaymentHistoryPageState extends ConsumerState<PaymentHistoryPage> {
 
   void _loadMore() {
     setState(() => _pageNumber += 1);
-  }
-}
-
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({required this.records, required this.transactionType});
-
-  final List<PaymentRecord> records;
-  final String transactionType;
-
-  @override
-  Widget build(BuildContext context) {
-    final isCreditOnly = transactionType.trim().toUpperCase() == 'CREDIT';
-    final spent = records.fold<double>(0, (sum, record) => sum + (record.isCredit ? 0 : record.amount));
-    final received = records.fold<double>(0, (sum, record) => sum + (record.isCredit ? record.amount : 0));
-    final total = isCreditOnly ? received : spent;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.neonBlue.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(13),
-              border: Border.all(color: AppColors.neonBlue.withValues(alpha: 0.24)),
-            ),
-            child: Icon(Icons.currency_rupee_rounded, color: AppColors.neonBlue, size: 21),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isCreditOnly ? 'Total received' : 'Total spent',
-                  style: const TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.4,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  _formatAmount(total),
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.4,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${records.length} payment${records.length == 1 ? '' : 's'}',
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 
@@ -253,7 +181,7 @@ class _FilterBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
@@ -262,22 +190,61 @@ class _FilterBar extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const Text(
+            'Type',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final type in _transactionTypes)
+                _TypeChip(
+                  label: type == 'ALL'
+                      ? 'All'
+                      : type == 'DEBIT'
+                      ? 'Debits'
+                      : 'Credits',
+                  selected: transactionType.trim().toUpperCase() == type,
+                  onTap: () => onTransactionTypeChanged(type),
+                ),
+            ],
+          ),
+          const SizedBox(height: 18),
           Row(
             children: [
-              for (final type in _transactionTypes) ...[
-                if (type != _transactionTypes.first) const SizedBox(width: 8),
-                Expanded(
-                  child: _TypeChip(
-                    label: type == 'ALL'
-                        ? 'All'
-                        : type == 'DEBIT'
-                        ? 'Debits'
-                        : 'Credits',
-                    selected: transactionType.trim().toUpperCase() == type,
-                    onTap: () => onTransactionTypeChanged(type),
+              Expanded(
+                child: Text(
+                  'Date range',
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
                   ),
                 ),
-              ],
+              ),
+              const SizedBox(width: 10),
+              Container(
+                decoration: BoxDecoration(
+                  color: onlyThisMonth
+                      ? AppColors.neonBlue.withValues(alpha: 0.15)
+                      : AppColors.background.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: onlyThisMonth ? AppColors.neonBlue.withValues(alpha: 0.6) : AppColors.border,
+                  ),
+                ),
+                child: Switch(
+                  value: onlyThisMonth,
+                  onChanged: onOnlyThisMonthChanged,
+                  activeThumbColor: AppColors.neonBlue,
+                  activeTrackColor: AppColors.neonBlue.withValues(alpha: 0.35),
+                  inactiveThumbColor: AppColors.textMuted,
+                  inactiveTrackColor: AppColors.border,
+                ),
+              ),
             ],
           ),
           if (!onlyThisMonth) ...[
@@ -300,18 +267,6 @@ class _FilterBar extends StatelessWidget {
               ],
             ),
           ],
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'This month',
-                  style: TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
-                ),
-              ),
-              Switch(value: onlyThisMonth, onChanged: onOnlyThisMonthChanged, activeThumbColor: AppColors.neonBlue),
-            ],
-          ),
         ],
       ),
     );
@@ -338,7 +293,7 @@ class _TypeChip extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(12),
           child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 11),
+            padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 16),
             alignment: Alignment.center,
             child: Text(
               label,
@@ -447,7 +402,11 @@ class _RecordsList extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final record in page.data) _PaymentRecordTile(record: record),
+        for (final record in page.data)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _PaymentRecordTile(record: record),
+          ),
         if (page.hasNext) _LoadMore(onPressed: onLoadMore),
       ],
     );
@@ -463,125 +422,133 @@ class _PaymentRecordTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final isCredit = record.isCredit;
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _PaymentRecordIcon(paymentMedium: record.paymentMedium),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      record.payeeLabel,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 14.5, fontWeight: FontWeight.w700),
-                    ),
-                    if (record.recipientIdentifier != null && record.recipientIdentifier!.trim().isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        record.recipientIdentifier!.trim(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: AppColors.textMuted, fontSize: 11.5),
-                      ),
-                    ],
-                    if (record.note != null && record.note!.trim().isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        record.note!.trim(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                _formatAmount(record.amount),
-                style: TextStyle(
-                  color: isCredit ? AppColors.income : AppColors.expense,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-          if (record.category.code.isNotEmpty || record.bankUpdated) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () => context.push('/payment-records/${record.id}'),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (record.category.code.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.neonBlue.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: AppColors.neonBlue.withValues(alpha: 0.25)),
-                    ),
-                    child: Text(
-                      record.category.name,
-                      style: const TextStyle(
-                        color: AppColors.neonBlueBright,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.4,
+                _PaymentRecordIcon(paymentMedium: record.paymentMedium),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        record.payeeLabel,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                    ),
-                  ),
-                Text(
-                  record.paymentMedium,
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w600),
-                ),
-                Text(
-                  _formatDate(record.paidAt),
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w600),
-                ),
-                if (record.bankUpdated)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.income.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: AppColors.income.withValues(alpha: 0.28)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.cloud_download_rounded, color: AppColors.income, size: 11),
-                        const SizedBox(width: 4),
-                        const Text(
-                          'Bank updated',
-                          style: TextStyle(
-                            color: AppColors.income,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.4,
-                          ),
+                      if (record.recipientIdentifier != null && record.recipientIdentifier!.trim().isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          record.recipientIdentifier!.trim(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: AppColors.textMuted, fontSize: 11.5),
                         ),
                       ],
-                    ),
+                      if (record.note != null && record.note!.trim().isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          record.note!.trim(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                        ),
+                      ],
+                    ],
                   ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  _formatAmount(record.amount),
+                  style: TextStyle(
+                    color: isCredit ? AppColors.income : AppColors.expense,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ],
             ),
+            if (record.category.code.isNotEmpty || record.bankUpdated) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  if (record.category.code.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.neonBlue.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: AppColors.neonBlue.withValues(alpha: 0.25)),
+                      ),
+                      child: Text(
+                        record.category.name,
+                        style: const TextStyle(
+                          color: AppColors.neonBlueBright,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ),
+                  Text(
+                    record.paymentMedium,
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  Text(
+                    _formatDate(record.paidAt),
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  if (record.bankUpdated)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.income.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: AppColors.income.withValues(alpha: 0.28)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.cloud_download_rounded, color: AppColors.income, size: 11),
+                          const SizedBox(width: 4),
+                          const Text(
+                            'Bank updated',
+                            style: TextStyle(
+                              color: AppColors.income,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -695,16 +662,9 @@ class _EmptyPaymentsState extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Try adjusting your filters, or make a new payment.',
+            'Try adjusting your filters.',
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.textMuted, fontSize: 12.5, height: 1.45),
-          ),
-          const SizedBox(height: 18),
-          NeonButton(
-            label: 'Make a payment',
-            icon: Icons.qr_code_scanner_rounded,
-            onPressed: () => context.push('/scan'),
-            height: 46,
           ),
         ],
       ),
