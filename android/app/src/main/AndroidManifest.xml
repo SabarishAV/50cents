@@ -45,10 +45,19 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
-        <!-- Lets us hand off payment intents to installed UPI apps. -->
+        <!-- Lets us hand off payment intents to installed UPI apps. Both
+             variants are needed: apps like Amazon Pay declare a scheme-only
+             filter, while Google Pay / PhonePe / BHIM / bank apps declare
+             scheme + host "pay". Package visibility only exposes an app when
+             one of these query intents matches its filter exactly, so the
+             scheme-only entry alone would hide almost every UPI app. -->
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="upi" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="upi" android:host="pay" />
         </intent>
     </queries>
 </manifest>

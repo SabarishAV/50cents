@@ -11,9 +11,11 @@ import 'package:_50cents/features/payments/data/contact_lookup.dart';
 import 'package:_50cents/features/payments/data/models/create_payment_record_request.dart';
 import 'package:_50cents/features/payments/data/models/payment_category.dart';
 import 'package:_50cents/features/payments/data/payment_repository.dart';
+import 'package:_50cents/features/payments/data/upi_apps.dart';
 import 'package:_50cents/features/payments/data/upi_payment.dart';
 import 'package:_50cents/features/payments/presentation/widgets/contact_picker_sheet.dart';
 import 'package:_50cents/features/payments/presentation/widgets/payment_ui.dart';
+import 'package:_50cents/features/payments/presentation/widgets/upi_app_picker.dart';
 
 enum PayTarget { phone, upi }
 
@@ -52,6 +54,13 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
   bool _submitting = false;
   bool _updateBankBalance = false;
   String? _error;
+
+  /// Installed UPI apps, loaded up front so the picker opens instantly. When
+  /// empty, the payment falls back to the phone's own app chooser.
+  List<UpiApp> _upiApps = const <UpiApp>[];
+  String? _lastAppId;
+  bool _loadingApps = true;
+  Future<void>? _appsFuture;
 
   String? _selectedCategoryCode;
   String? _autoSuggestedName;
@@ -98,6 +107,7 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
       if (_predictionRecipient.trim().isNotEmpty) _schedulePrediction();
       if (_payeeController.text.trim().isNotEmpty) _scheduleContactLookup();
     });
+    _appsFuture = _loadUpiApps();
   }
 
   @override
@@ -109,6 +119,47 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
     _amountController.dispose();
     _noteController.dispose();
     super.dispose();
+  }
+
+  /// Loads the installed UPI apps and remembers the one used last time, so the
+  /// picker can preselect it. A failure simply leaves the list empty and the
+  /// system chooser is used instead.
+  Future<void> _loadUpiApps() async {
+    List<UpiApp> apps = const <UpiApp>[];
+    String? lastId;
+    try {
+      apps = await ref.read(upiAppsProvider.future);
+      lastId = await ref.read(upiAppPreferenceProvider).readId();
+    } catch (_) {
+      apps = const <UpiApp>[];
+    }
+    if (!mounted) return;
+
+    setState(() {
+      _loadingApps = false;
+      _upiApps = apps;
+      _lastAppId = lastId;
+    });
+  }
+
+  /// Asks which app should handle the payment, right before submitting it.
+  ///
+  /// Returns `null` when the picker was dismissed (nothing is submitted then),
+  /// or a choice with no app when none was detected — the phone's own chooser
+  /// takes over in that case.
+  Future<UpiAppChoice?> _askForUpiApp({required double amount, required String payee}) async {
+    if (_loadingApps) {
+      await _appsFuture;
+      if (!mounted) return null;
+    }
+    if (_upiApps.isEmpty) return const UpiAppChoice(null);
+
+    return showUpiAppPicker(
+      context,
+      apps: _upiApps,
+      preselectId: _lastAppId,
+      subtitle: '${formatInr(amount)} to $payee',
+    );
   }
 
   String get _title {
@@ -343,13 +394,26 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
 
     final intent = payment.toUri(amountOverride: amount.toStringAsFixed(2));
 
+    // Ask which app should handle the payment. Nothing is submitted until the
+    // user has chosen, so dismissing the picker leaves the form untouched.
+    final choice = await _askForUpiApp(amount: amount, payee: rawPayee);
+    if (!mounted || choice == null) return;
+
+    // The chosen app's name becomes the payment medium so the ledger records
+    // which app the payment went through; without a pick we fall back to the
+    // system chooser and record "UPI".
+    final selectedApp = choice.app;
+    final selectedName = selectedApp?.name.trim();
+    final paymentMedium = (selectedName == null || selectedName.isEmpty) ? 'UPI' : selectedName;
+
     setState(() {
       _submitting = true;
       _error = null;
     });
 
-    // Avoid saving a record when there is no app that can complete the payment.
-    if (!await canLaunchUpiApp(intent)) {
+    // When no specific app was chosen, make sure some UPI app can handle the
+    // intent before saving a record for a payment we cannot hand off.
+    if (selectedApp == null && !await canLaunchUpiApp(intent)) {
       if (!mounted) return;
       setState(() {
         _submitting = false;
@@ -369,9 +433,7 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
               // The UPI ID (or phone number) the payment was sent to.
               recipientIdentifier: recipientIdentifier,
               note: note,
-              // The actual UPI app is picked in the system chooser, so the
-              // payment medium is recorded as UPI.
-              paymentMedium: 'UPI',
+              paymentMedium: paymentMedium,
               transactionType: 'DEBIT',
               category: _selectedCategoryCode,
               updateBankBalance: _updateBankBalance,
@@ -388,10 +450,16 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
 
     if (!mounted) return;
 
-    final launched = await launchUpiApp(intent);
+    // With a chosen app the intent is forced to that package; otherwise the
+    // system chooser decides.
+    final launched = selectedApp == null ? await launchUpiApp(intent) : await launchUpiWithApp(intent, selectedApp);
     if (!mounted) return;
 
     if (launched) {
+      if (selectedApp != null) {
+        await ref.read(upiAppPreferenceProvider).saveId(selectedApp.id);
+      }
+      if (!mounted) return;
       Navigator.of(context).pop(true);
       return;
     }
@@ -551,20 +619,18 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
                         ],
                       ],
                       const SizedBox(height: 20),
-                      Row(
-                        children: [
-                          const PaymentSectionLabel(label: 'Amount'),
-                          const Spacer(),
-                          if (amount != null)
-                            Text(
-                              'Paying with UPI',
-                              style: TextStyle(
-                                color: AppColors.textMuted.withValues(alpha: 0.85),
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
+                      PaymentSectionLabel(
+                        label: 'Amount',
+                        trailing: amount == null
+                            ? null
+                            : Text(
+                                'Paying with UPI',
+                                style: TextStyle(
+                                  color: AppColors.textMuted.withValues(alpha: 0.85),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
-                            ),
-                        ],
                       ),
                       const SizedBox(height: 10),
                       TextFormField(

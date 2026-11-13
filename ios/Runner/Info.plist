@@ -31,6 +31,23 @@
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>upi</string>
+		<!-- iOS cannot enumerate installed apps; these known UPI app schemes are
+		     probed with canOpenURL to show a best-effort list of what's installed. -->
+		<string>phonepe</string>
+		<string>tez</string>
+		<string>gpay</string>
+		<string>paytmmp</string>
+		<string>paytm</string>
+		<string>bhim</string>
+		<string>amazonpay</string>
+		<string>cred</string>
+		<string>navi</string>
+		<string>slice</string>
+		<string>mobikwik</string>
+		<string>freecharge</string>
+		<string>supermoney</string>
+		<string>jupiter</string>
+		<string>indmoney</string>
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>

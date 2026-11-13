@@ -126,6 +126,22 @@ String paymentInitials(String label) {
 IconData paymentMediumIcon(String medium) {
   final value = medium.trim().toUpperCase();
   if (value.contains('UPI')) return Icons.bolt_rounded;
+  // Payments are recorded by the UPI app's name when we know it (see
+  // upi_apps.dart); give those a wallet icon instead of the generic fallback.
+  if (value.contains('PHONEPE') ||
+      value.contains('PHONE PE') ||
+      value.contains('PAYTM') ||
+      value.contains('BHIM') ||
+      value.contains('CRED') ||
+      value.contains('NAVI') ||
+      value.contains('SLICE') ||
+      value.contains('MOBIKWIK') ||
+      value.contains('FREECHARGE') ||
+      value.contains('SUPERMONEY') ||
+      value.contains('JUPITER') ||
+      value.contains('INDMONEY')) {
+    return Icons.account_balance_wallet_rounded;
+  }
   if (value.contains('CARD')) return Icons.credit_card_rounded;
   if (value.contains('GOOGLE') || value.contains('WALLET')) return Icons.wallet_rounded;
   if (value.contains('AMAZON') || value.contains('STORE')) return Icons.shopping_bag_rounded;
