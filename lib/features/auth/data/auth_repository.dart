@@ -65,4 +65,26 @@ class AuthRepository {
     final response = await _dio.post('/user/email/change/verify', queryParameters: <String, dynamic>{'otp': otp});
     return AuthResponse.fromJson(response.data);
   }
+
+  /// POST /user/delete/request — Response: { success: true, message: "string" }
+  ///
+  /// Sends an OTP to the registered email to confirm the deletion. The password
+  /// is optional because accounts created with Google may not have one. Like the
+  /// other user endpoints, the API binds the request from **query parameters**.
+  Future<AuthResponse> requestAccountDeletion({String? password}) async {
+    final response = await _dio.post(
+      '/user/delete/request',
+      queryParameters: <String, dynamic>{if (password != null && password.isNotEmpty) 'password': password},
+    );
+    return AuthResponse.fromJson(response.data);
+  }
+
+  /// POST /user/delete/verify — Response: { success: true, message: "string" }
+  ///
+  /// Confirms the OTP sent to the registered email and permanently deletes the
+  /// account. The token is invalid afterwards, so the caller must sign out.
+  Future<AuthResponse> verifyAccountDeletion(String otp) async {
+    final response = await _dio.post('/user/delete/verify', queryParameters: <String, dynamic>{'otp': otp});
+    return AuthResponse.fromJson(response.data);
+  }
 }

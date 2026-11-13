@@ -20,6 +20,8 @@ class AuthState {
   final bool isChangingPassword;
   final bool isRequestingEmailChange;
   final bool isVerifyingEmailChange;
+  final bool isRequestingAccountDeletion;
+  final bool isVerifyingAccountDeletion;
   final String? error;
 
   /// Per-field validation messages from the API keyed by field name.
@@ -36,6 +38,8 @@ class AuthState {
     this.isChangingPassword = false,
     this.isRequestingEmailChange = false,
     this.isVerifyingEmailChange = false,
+    this.isRequestingAccountDeletion = false,
+    this.isVerifyingAccountDeletion = false,
     this.error,
     this.fieldErrors = const <String, String>{},
     this.session,
@@ -51,6 +55,8 @@ class AuthState {
     bool? isChangingPassword,
     bool? isRequestingEmailChange,
     bool? isVerifyingEmailChange,
+    bool? isRequestingAccountDeletion,
+    bool? isVerifyingAccountDeletion,
     Object? error = _unset,
     Object? fieldErrors = _unset,
     Object? session = _unset,
@@ -63,6 +69,8 @@ class AuthState {
       isChangingPassword: isChangingPassword ?? this.isChangingPassword,
       isRequestingEmailChange: isRequestingEmailChange ?? this.isRequestingEmailChange,
       isVerifyingEmailChange: isVerifyingEmailChange ?? this.isVerifyingEmailChange,
+      isRequestingAccountDeletion: isRequestingAccountDeletion ?? this.isRequestingAccountDeletion,
+      isVerifyingAccountDeletion: isVerifyingAccountDeletion ?? this.isVerifyingAccountDeletion,
       error: identical(error, _unset) ? this.error : error as String?,
       fieldErrors: identical(fieldErrors, _unset) ? this.fieldErrors : fieldErrors as Map<String, String>,
       session: identical(session, _unset) ? this.session : session as AuthSession?,
@@ -115,6 +123,8 @@ class AuthNotifier extends Notifier<AuthState> {
       isChangingPassword: false,
       isRequestingEmailChange: false,
       isVerifyingEmailChange: false,
+      isRequestingAccountDeletion: false,
+      isVerifyingAccountDeletion: false,
       error: null,
     );
     try {
@@ -186,6 +196,8 @@ class AuthNotifier extends Notifier<AuthState> {
       isChangingPassword: true,
       isRequestingEmailChange: false,
       isVerifyingEmailChange: false,
+      isRequestingAccountDeletion: false,
+      isVerifyingAccountDeletion: false,
       error: null,
       fieldErrors: const <String, String>{},
     );
@@ -293,6 +305,97 @@ class AuthNotifier extends Notifier<AuthState> {
       };
       state = state.copyWith(
         isVerifyingEmailChange: false,
+        error: _formatError(e),
+        fieldErrors: apiError?.fieldErrors ?? const <String, String>{},
+      );
+      return false;
+    }
+  }
+
+  /// Request account deletion via POST /user/delete/request.
+  ///
+  /// Sends an OTP to the registered email. [password] is optional because
+  /// accounts created with Google may not have one. Returns `true` when the
+  /// request was accepted.
+  Future<bool> requestAccountDeletion({String? password}) async {
+    state = state.copyWith(
+      isRequestingAccountDeletion: true,
+      isVerifyingAccountDeletion: false,
+      isRegistering: false,
+      isLoggingIn: false,
+      isGoogleSigningIn: false,
+      isChangingPassword: false,
+      isRequestingEmailChange: false,
+      isVerifyingEmailChange: false,
+      error: null,
+      fieldErrors: const <String, String>{},
+    );
+    try {
+      final response = await _repository.requestAccountDeletion(password: password);
+      state = state.copyWith(
+        isRequestingAccountDeletion: false,
+        error: response.success
+            ? null
+            : (response.message?.isEmpty ?? true
+                  ? 'Could not start account deletion. Please try again.'
+                  : response.message),
+        fieldErrors: const <String, String>{},
+      );
+      return response.success;
+    } catch (e) {
+      final apiError = switch (e) {
+        ApiException apiError => apiError,
+        DioException dioError => ApiException.from(dioError),
+        _ => null,
+      };
+      state = state.copyWith(
+        isRequestingAccountDeletion: false,
+        error: _formatError(e),
+        fieldErrors: apiError?.fieldErrors ?? const <String, String>{},
+      );
+      return false;
+    }
+  }
+
+  /// Verify the account deletion OTP via POST /user/delete/verify.
+  ///
+  /// On success the account is gone and the token is no longer valid, so the
+  /// local session is cleared. Returns `true` when the account was deleted.
+  Future<bool> verifyAccountDeletion(String otp) async {
+    state = state.copyWith(
+      isVerifyingAccountDeletion: true,
+      isRequestingAccountDeletion: false,
+      isRegistering: false,
+      isLoggingIn: false,
+      isGoogleSigningIn: false,
+      isChangingPassword: false,
+      isRequestingEmailChange: false,
+      isVerifyingEmailChange: false,
+      error: null,
+      fieldErrors: const <String, String>{},
+    );
+    try {
+      final response = await _repository.verifyAccountDeletion(otp);
+      if (!response.success) {
+        state = state.copyWith(
+          isVerifyingAccountDeletion: false,
+          error: response.message?.isEmpty ?? true
+              ? 'Could not delete your account. Please try again.'
+              : response.message,
+        );
+        return false;
+      }
+
+      await logout();
+      return true;
+    } catch (e) {
+      final apiError = switch (e) {
+        ApiException apiError => apiError,
+        DioException dioError => ApiException.from(dioError),
+        _ => null,
+      };
+      state = state.copyWith(
+        isVerifyingAccountDeletion: false,
         error: _formatError(e),
         fieldErrors: apiError?.fieldErrors ?? const <String, String>{},
       );

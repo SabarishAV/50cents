@@ -13,6 +13,7 @@ import 'package:_50cents/features/auth/presentation/widgets/user_avatar.dart';
 import 'package:_50cents/features/home/presentation/widgets/app_bottom_nav.dart';
 import 'package:_50cents/features/profile/presentation/widgets/change_email_dialog.dart';
 import 'package:_50cents/features/profile/presentation/widgets/change_password_dialog.dart';
+import 'package:_50cents/features/profile/presentation/widgets/delete_account_dialog.dart';
 
 /// Profile screen — account details, decoded token claims and logout.
 class ProfilePage extends ConsumerWidget {
@@ -103,9 +104,12 @@ class ProfilePage extends ConsumerWidget {
                         const SizedBox(height: 22),
                         _SessionStatusCard(session: session),
                         const SizedBox(height: 16),
-                        _AccountCard(session: session, onChangeEmail: () => ChangeEmailDialog.show(context)),
+                        _AccountCard(session: session),
                         const SizedBox(height: 16),
-                        _SecurityCard(onChangePassword: () => ChangePasswordDialog.show(context)),
+                        _SecurityCard(
+                          onChangeEmail: () => ChangeEmailDialog.show(context),
+                          onChangePassword: () => ChangePasswordDialog.show(context),
+                        ),
                         const SizedBox(height: 16),
                         if (session.claims.isNotEmpty) ...[_ClaimsCard(session: session), const SizedBox(height: 16)],
                         SizedBox(
@@ -121,6 +125,24 @@ class ProfilePage extends ConsumerWidget {
                               textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                             ),
                           ),
+                        ),
+                        const SizedBox(height: 22),
+                        const Divider(color: AppColors.border, height: 1),
+                        const SizedBox(height: 12),
+                        TextButton.icon(
+                          onPressed: () => DeleteAccountDialog.show(context),
+                          icon: const Icon(Icons.delete_forever_rounded, size: 18, color: AppColors.expense),
+                          label: const Text('Delete account'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColors.expense,
+                            minimumSize: const Size.fromHeight(48),
+                            textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        const Text(
+                          'Permanently remove your account and all of its data',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: AppColors.textMuted, fontSize: 11, height: 1.3),
                         ),
                       ],
                     ),
@@ -258,10 +280,9 @@ class _SessionStatusCard extends StatelessWidget {
 }
 
 class _AccountCard extends StatelessWidget {
-  const _AccountCard({required this.session, required this.onChangeEmail});
+  const _AccountCard({required this.session});
 
   final AuthSession session;
-  final VoidCallback onChangeEmail;
 
   @override
   Widget build(BuildContext context) {
@@ -272,7 +293,23 @@ class _AccountCard extends StatelessWidget {
         _InfoRow(label: 'Name', value: session.name ?? session.displayName),
         if (session.email != null) _InfoRow(label: 'Email', value: session.email!),
         if (session.userId != null) _InfoRow(label: 'User ID', value: session.userId!, monospace: true),
-        const SizedBox(height: 2),
+      ],
+    );
+  }
+}
+
+class _SecurityCard extends StatelessWidget {
+  const _SecurityCard({required this.onChangeEmail, required this.onChangePassword});
+
+  final VoidCallback onChangeEmail;
+  final VoidCallback onChangePassword;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Card(
+      title: 'Security',
+      icon: Icons.lock_outline_rounded,
+      children: [
         ListTile(
           contentPadding: EdgeInsets.zero,
           minLeadingWidth: 0,
@@ -286,22 +323,6 @@ class _AccountCard extends StatelessWidget {
           onTap: onChangeEmail,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
-      ],
-    );
-  }
-}
-
-class _SecurityCard extends StatelessWidget {
-  const _SecurityCard({required this.onChangePassword});
-
-  final VoidCallback onChangePassword;
-
-  @override
-  Widget build(BuildContext context) {
-    return _Card(
-      title: 'Security',
-      icon: Icons.lock_outline_rounded,
-      children: [
         ListTile(
           contentPadding: EdgeInsets.zero,
           minLeadingWidth: 0,
