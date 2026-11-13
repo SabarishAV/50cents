@@ -19,7 +19,12 @@ final dioProvider = Provider<Dio>((ref) {
   dio.interceptors.add(
     InterceptorsWrapper(
       onRequest: (options, handler) async {
-        if (!options.path.startsWith('/auth/')) {
+        // Skip auth header for public auth endpoints (register, login, google)
+        // but include it for protected auth endpoints (password change, etc.)
+        final isPublicAuthEndpoint =
+            options.path == '/auth/register' || options.path == '/auth/login' || options.path == '/auth/google';
+
+        if (!isPublicAuthEndpoint) {
           final token = await tokenStorage.read();
           if (token != null) {
             options.headers['Authorization'] = 'Bearer $token';

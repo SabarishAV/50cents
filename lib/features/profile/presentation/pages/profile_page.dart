@@ -11,6 +11,7 @@ import 'package:_50cents/features/auth/data/models/auth_session.dart';
 import 'package:_50cents/features/auth/presentation/providers/auth_provider.dart';
 import 'package:_50cents/features/auth/presentation/widgets/user_avatar.dart';
 import 'package:_50cents/features/home/presentation/widgets/app_bottom_nav.dart';
+import 'package:_50cents/features/profile/presentation/widgets/change_password_dialog.dart';
 
 /// Profile screen — account details, decoded token claims and logout.
 class ProfilePage extends ConsumerWidget {
@@ -102,6 +103,8 @@ class ProfilePage extends ConsumerWidget {
                         _SessionStatusCard(session: session),
                         const SizedBox(height: 16),
                         _AccountCard(session: session),
+                        const SizedBox(height: 16),
+                        _SecurityCard(onChangePassword: () => ChangePasswordDialog.show(context)),
                         const SizedBox(height: 16),
                         if (session.claims.isNotEmpty) ...[_ClaimsCard(session: session), const SizedBox(height: 16)],
                         SizedBox(
@@ -267,6 +270,35 @@ class _AccountCard extends StatelessWidget {
         _InfoRow(label: 'Name', value: session.name ?? session.displayName),
         if (session.email != null) _InfoRow(label: 'Email', value: session.email!),
         if (session.userId != null) _InfoRow(label: 'User ID', value: session.userId!, monospace: true),
+      ],
+    );
+  }
+}
+
+class _SecurityCard extends StatelessWidget {
+  const _SecurityCard({required this.onChangePassword});
+
+  final VoidCallback onChangePassword;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Card(
+      title: 'Security',
+      icon: Icons.lock_outline_rounded,
+      children: [
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          minLeadingWidth: 0,
+          leading: const Icon(Icons.password_rounded, color: AppColors.textMuted, size: 20),
+          title: const Text('Change Password', style: TextStyle(color: AppColors.textPrimary, fontSize: 14)),
+          subtitle: const Text(
+            'Update your account password',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+          ),
+          trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+          onTap: onChangePassword,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
       ],
     );
   }

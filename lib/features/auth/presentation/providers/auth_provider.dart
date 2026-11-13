@@ -17,7 +17,11 @@ class AuthState {
   final bool isRegistering;
   final bool isLoggingIn;
   final bool isGoogleSigningIn;
+  final bool isChangingPassword;
   final String? error;
+
+  /// Per-field validation messages from the API keyed by field name.
+  final Map<String, String> fieldErrors;
 
   /// Token + decoded claims for the signed-in user.
   final AuthSession? session;
@@ -27,7 +31,9 @@ class AuthState {
     this.isRegistering = false,
     this.isLoggingIn = false,
     this.isGoogleSigningIn = false,
+    this.isChangingPassword = false,
     this.error,
+    this.fieldErrors = const <String, String>{},
     this.session,
   });
 
@@ -38,7 +44,9 @@ class AuthState {
     bool? isRegistering,
     bool? isLoggingIn,
     bool? isGoogleSigningIn,
+    bool? isChangingPassword,
     Object? error = _unset,
+    Object? fieldErrors = _unset,
     Object? session = _unset,
   }) {
     return AuthState(
@@ -46,7 +54,9 @@ class AuthState {
       isRegistering: isRegistering ?? this.isRegistering,
       isLoggingIn: isLoggingIn ?? this.isLoggingIn,
       isGoogleSigningIn: isGoogleSigningIn ?? this.isGoogleSigningIn,
+      isChangingPassword: isChangingPassword ?? this.isChangingPassword,
       error: identical(error, _unset) ? this.error : error as String?,
+      fieldErrors: identical(fieldErrors, _unset) ? this.fieldErrors : fieldErrors as Map<String, String>,
       session: identical(session, _unset) ? this.session : session as AuthSession?,
     );
   }
@@ -90,7 +100,13 @@ class AuthNotifier extends Notifier<AuthState> {
   /// Response: { success: true, message: "string" }
   /// Returns `true` when the account was created.
   Future<bool> register(RegisterRequest request) async {
-    state = state.copyWith(isRegistering: true, isLoggingIn: false, isGoogleSigningIn: false, error: null);
+    state = state.copyWith(
+      isRegistering: true,
+      isLoggingIn: false,
+      isGoogleSigningIn: false,
+      isChangingPassword: false,
+      error: null,
+    );
     try {
       final response = await _repository.register(request);
       state = state.copyWith(
@@ -108,7 +124,13 @@ class AuthNotifier extends Notifier<AuthState> {
   /// Response: { success: true, token: "string" }
   /// Returns `true` when the session was stored.
   Future<bool> googleLogin(String idToken) async {
-    state = state.copyWith(isGoogleSigningIn: true, isRegistering: false, isLoggingIn: false, error: null);
+    state = state.copyWith(
+      isGoogleSigningIn: true,
+      isRegistering: false,
+      isLoggingIn: false,
+      isChangingPassword: false,
+      error: null,
+    );
     try {
       final response = await _repository.googleLogin(idToken);
       return await _completeLogin(
@@ -126,7 +148,13 @@ class AuthNotifier extends Notifier<AuthState> {
   /// Response: { success: true, token: "string" }
   /// Returns `true` when the session was stored.
   Future<bool> login(String identifier, String password) async {
-    state = state.copyWith(isLoggingIn: true, isRegistering: false, isGoogleSigningIn: false, error: null);
+    state = state.copyWith(
+      isLoggingIn: true,
+      isRegistering: false,
+      isGoogleSigningIn: false,
+      isChangingPassword: false,
+      error: null,
+    );
     try {
       final response = await _repository.login(identifier, password);
       return await _completeLogin(
@@ -140,6 +168,36 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
+  /// Change password via PUT /auth/password.
+  /// currentPassword is optional (for Google OAuth users).
+  /// Returns `true` when the password was changed successfully.
+  Future<bool> changePassword({String? currentPassword, required String newPassword}) async {
+    state = state.copyWith(isChangingPassword: true, error: null, fieldErrors: const <String, String>{});
+    try {
+      final response = await _repository.changePassword(currentPassword: currentPassword, newPassword: newPassword);
+      state = state.copyWith(
+        isChangingPassword: false,
+        error: response.success
+            ? null
+            : (response.message?.isEmpty ?? true ? 'Failed to change password' : response.message),
+        fieldErrors: const <String, String>{},
+      );
+      return response.success;
+    } catch (e) {
+      final apiError = switch (e) {
+        ApiException apiError => apiError,
+        DioException dioError => ApiException.from(dioError),
+        _ => null,
+      };
+      state = state.copyWith(
+        isChangingPassword: false,
+        error: _formatError(e),
+        fieldErrors: apiError?.fieldErrors ?? const <String, String>{},
+      );
+      return false;
+    }
+  }
+
   /// Persists the token + decoded claims and marks the user as signed in.
   Future<bool> _completeLogin({required bool success, required String? token, required String fallbackMessage}) async {
     if (!success || token == null || token.isEmpty) {
@@ -147,6 +205,7 @@ class AuthNotifier extends Notifier<AuthState> {
         isLoggingIn: false,
         isGoogleSigningIn: false,
         isRegistering: false,
+        isChangingPassword: false,
         error: fallbackMessage,
       );
       return false;
@@ -160,6 +219,7 @@ class AuthNotifier extends Notifier<AuthState> {
         isLoggingIn: false,
         isGoogleSigningIn: false,
         isRegistering: false,
+        isChangingPassword: false,
         error: 'Could not store your session securely. Please try again.',
       );
       return false;
@@ -170,8 +230,8 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   void clearError() {
-    if (state.error != null) {
-      state = state.copyWith(error: null);
+    if (state.error != null || state.fieldErrors.isNotEmpty) {
+      state = state.copyWith(error: null, fieldErrors: const <String, String>{});
     }
   }
 

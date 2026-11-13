@@ -33,4 +33,19 @@ class AuthRepository {
     final response = await _dio.post('/auth/google', data: GoogleLoginRequest(idToken: idToken).toJson());
     return AuthResponse.fromJson(response.data);
   }
+
+  /// PUT /auth/password — Response: { success: true, message: "string" }
+  ///
+  /// The API binds `ChangePasswordRequest` from **query parameters** (not a JSON
+  /// body), so the payload must be sent as `queryParameters`.
+  Future<AuthResponse> changePassword({String? currentPassword, required String newPassword}) async {
+    final response = await _dio.put(
+      '/auth/password',
+      queryParameters: <String, dynamic>{
+        if (currentPassword != null && currentPassword.isNotEmpty) 'currentPassword': currentPassword,
+        'newPassword': newPassword,
+      },
+    );
+    return AuthResponse.fromJson(response.data);
+  }
 }
