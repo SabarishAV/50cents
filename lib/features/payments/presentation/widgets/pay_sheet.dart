@@ -13,6 +13,7 @@ import 'package:_50cents/features/payments/data/models/payment_category.dart';
 import 'package:_50cents/features/payments/data/payment_repository.dart';
 import 'package:_50cents/features/payments/data/upi_payment.dart';
 import 'package:_50cents/features/payments/presentation/widgets/contact_picker_sheet.dart';
+import 'package:_50cents/features/payments/presentation/widgets/payment_ui.dart';
 
 enum PayTarget { phone, upi }
 
@@ -77,6 +78,12 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
   bool get _isPhone => widget.target == PayTarget.phone;
   bool get _isScanned => widget.target == PayTarget.upi && widget.scanned != null;
 
+  double? get _enteredAmount {
+    final text = _amountController.text.trim().replaceAll(',', '');
+    final value = double.tryParse(text);
+    return value == null || value <= 0 ? null : value;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -105,9 +112,9 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
   }
 
   String get _title {
-    if (_isPhone) return 'Send to phone number';
+    if (_isPhone) return 'Send to a phone number';
     if (_isScanned) return 'Pay via scanned QR';
-    return 'Send to UPI ID';
+    return 'Send to a UPI ID';
   }
 
   String get _subtitle {
@@ -118,7 +125,7 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
 
   IconData get _icon {
     if (_isPhone) return Icons.phone_android_rounded;
-    if (_isScanned) return Icons.qr_code_scanner_rounded;
+    if (_isScanned) return Icons.qr_code_2_rounded;
     return Icons.alternate_email_rounded;
   }
 
@@ -395,300 +402,282 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
     });
   }
 
+  void _setQuickAmount(int amount) {
+    setState(() {
+      _amountController.text = amount.toString();
+      _amountController.selection = TextSelection.collapsed(offset: _amountController.text.length);
+      _error = null;
+    });
+  }
+
+  void _toggleBankBalance() {
+    setState(() => _updateBankBalance = !_updateBankBalance);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final media = MediaQuery.of(context);
+    final height = (media.size.height - media.viewInsets.bottom) * 0.93;
     final categories = ref.watch(categoriesProvider);
+    final amount = _enteredAmount;
 
     return Padding(
-      padding: EdgeInsets.only(bottom: bottomInset),
-      child: Container(
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          border: Border(top: BorderSide(color: AppColors.border)),
-        ),
-        child: SafeArea(
-          top: false,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(22, 12, 22, 24),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
+      padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
+      child: PaymentSheetShell(
+        height: height,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const PaymentSheetHandle(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 0, 14, 0),
+              child: Row(
                 children: [
-                  Center(
-                    child: Container(
-                      width: 42,
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: 20),
-                      decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(4)),
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      Container(
-                        width: 46,
-                        height: 46,
-                        decoration: BoxDecoration(
-                          color: AppColors.neonBlue.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: AppColors.neonBlue.withValues(alpha: 0.3)),
+                  PaymentIconBadge(icon: _icon, size: 44, radius: 14),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _title,
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.2,
+                          ),
                         ),
-                        child: Icon(_icon, color: AppColors.neonBlue, size: 22),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _title,
-                              style: const TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 17,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              _subtitle,
-                              style: const TextStyle(color: AppColors.textMuted, fontSize: 12, height: 1.35),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (_detectedPayeeName != null) ...[
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: AppColors.background.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _isPhone ? Icons.person_outline_rounded : Icons.storefront_outlined,
-                            color: AppColors.textMuted,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _detectedPayeeName!,
-                              style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Icon(_detectedPayeeIcon, color: AppColors.neonBlue, size: 16),
-                        ],
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 22),
-                  TextFormField(
-                    controller: _payeeController,
-                    // The UPI ID comes straight from the scanned QR and cannot
-                    // be edited; amount, note, category and the bank-balance
-                    // toggle below stay editable.
-                    readOnly: _isScanned,
-                    keyboardType: _isPhone ? TextInputType.phone : TextInputType.emailAddress,
-                    inputFormatters: _isPhone ? [FilteringTextInputFormatter.digitsOnly] : null,
-                    style: const TextStyle(color: AppColors.textPrimary),
-                    decoration: appInputDecoration(
-                      _isPhone ? 'Phone number' : 'UPI ID',
-                      _isPhone ? Icons.phone_outlined : Icons.alternate_email_rounded,
-                      hint: _isPhone ? '9876543210' : 'name@bank',
-                      suffixIcon: _isScanned
-                          ? const Icon(Icons.lock_outline_rounded, color: AppColors.textMuted, size: 20)
-                          : _isPhone
-                          ? IconButton(
-                              tooltip: 'Choose from contacts',
-                              onPressed: _pickContact,
-                              icon: const Icon(Icons.contacts_rounded, color: AppColors.neonBlue, size: 20),
-                            )
-                          : null,
-                    ),
-                    onChanged: (_) {
-                      if (_error != null) setState(() => _error = null);
-                      _schedulePrediction();
-                      _scheduleContactLookup();
-                    },
-                    validator: (value) {
-                      final text = value?.trim() ?? '';
-                      if (text.isEmpty) {
-                        return _isPhone ? 'Please enter a phone number' : 'Please enter a UPI ID';
-                      }
-                      if (_isScanned) return null;
-                      if (_isPhone) {
-                        final digits = text.replaceAll(RegExp(r'[^0-9]'), '');
-                        if (digits.length < 10 || digits.length > 13) {
-                          return 'Enter a valid phone number';
-                        }
-                      } else if (!RegExp(r'^[a-zA-Z0-9._-]{2,}@[a-zA-Z]{2,}$').hasMatch(text)) {
-                        return 'Enter a valid UPI ID (like name@bank)';
-                      }
-                      return null;
-                    },
-                  ),
-                  // The scanned QR already carries the payee name (`pn`), shown
-                  // in the chip above, so the editable name field is hidden in
-                  // the scanned flow.
-                  if (!_isScanned) ...[
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _payeeNameController,
-                      maxLength: 255,
-                      textInputAction: TextInputAction.next,
-                      textCapitalization: TextCapitalization.words,
-                      style: const TextStyle(color: AppColors.textPrimary),
-                      decoration:
-                          appInputDecoration(
-                            _isPhone ? 'Payee name' : 'Payee name (optional)',
-                            Icons.person_outline_rounded,
-                            hint: _isPhone ? 'From your contacts' : 'Name shown in your UPI app',
-                          ).copyWith(
-                            counterText: '',
-                            suffixIcon: _lookingUpContact
-                                ? const Padding(
-                                    padding: EdgeInsets.only(right: 14),
-                                    child: SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(strokeWidth: 1.6, color: AppColors.neonBlue),
-                                    ),
-                                  )
-                                : null,
-                          ),
-                      onChanged: (_) {
-                        _autoFilledContactName = null;
-                        setState(() {
-                          if (_error != null) _error = null;
-                        });
-                        _schedulePrediction();
-                      },
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _amountController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-                    style: const TextStyle(color: AppColors.textPrimary),
-                    decoration: appInputDecoration('Amount', Icons.currency_rupee_rounded, hint: '0.00'),
-                    onChanged: (_) {
-                      if (_error != null) setState(() => _error = null);
-                    },
-                    validator: (value) {
-                      final text = value?.trim().replaceAll(',', '') ?? '';
-                      if (text.isEmpty) return 'Please enter an amount';
-                      final amount = double.tryParse(text);
-                      if (amount == null || amount <= 0) {
-                        return 'Enter a valid amount';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _noteController,
-                    minLines: 1,
-                    maxLines: 2,
-                    maxLength: 2048,
-                    textInputAction: TextInputAction.done,
-                    textCapitalization: TextCapitalization.sentences,
-                    style: const TextStyle(color: AppColors.textPrimary),
-                    decoration: appInputDecoration(
-                      'Note (optional)',
-                      Icons.notes_rounded,
-                      hint: 'What is this payment for?',
-                    ).copyWith(counterText: ''),
-                    onChanged: (_) {
-                      if (_error != null) setState(() => _error = null);
-                      _schedulePrediction();
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  _buildCategorySection(categories),
-                  const SizedBox(height: 14),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.background.withValues(alpha: 0.35),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: CheckboxListTile(
-                      value: _updateBankBalance,
-                      onChanged: (value) => setState(() => _updateBankBalance = value ?? false),
-                      dense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 6),
-                      controlAffinity: ListTileControlAffinity.leading,
-                      activeColor: AppColors.neonBlue,
-                      checkColor: Colors.black,
-                      title: const Text(
-                        'Update bank balance',
-                        style: TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
-                      subtitle: const Text(
-                        'Add this payment to your tracked bank balance.',
-                        style: TextStyle(color: AppColors.textMuted, fontSize: 11.5, height: 1.35),
-                      ),
+                        const SizedBox(height: 2),
+                        Text(_subtitle, style: const TextStyle(color: AppColors.textMuted, fontSize: 12, height: 1.35)),
+                      ],
                     ),
                   ),
-                  if (_error != null) ...[
-                    const SizedBox(height: 14),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppColors.expense.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: AppColors.expense.withValues(alpha: 0.35)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.error_outline_rounded, color: AppColors.expense, size: 17),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _error!,
-                              style: const TextStyle(color: AppColors.expense, fontSize: 12, height: 1.35),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-                  NeonButton(
-                    label: 'Pay',
-                    icon: Icons.currency_rupee_rounded,
-                    loading: _submitting,
-                    onPressed: _submitting ? null : _pay,
-                  ),
-                  const SizedBox(height: 14),
-                  const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.lock_outline_rounded, size: 13, color: AppColors.textMuted),
-                      SizedBox(width: 6),
-                      Flexible(
-                        child: Text(
-                          'Your payment is saved to your records first, then completed in your UPI app.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: AppColors.textMuted, fontSize: 11, height: 1.4),
-                        ),
-                      ),
-                    ],
+                  IconButton(
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded, color: AppColors.textMuted, size: 20),
                   ),
                 ],
               ),
             ),
-          ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: SingleChildScrollView(
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(22, 2, 22, 12),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_isScanned)
+                        _ScannedPayeeCard(scanned: widget.scanned!)
+                      else ...[
+                        TextFormField(
+                          controller: _payeeController,
+                          keyboardType: _isPhone ? TextInputType.phone : TextInputType.emailAddress,
+                          inputFormatters: _isPhone ? [FilteringTextInputFormatter.digitsOnly] : null,
+                          style: const TextStyle(color: AppColors.textPrimary),
+                          decoration: appInputDecoration(
+                            _isPhone ? 'Phone number' : 'UPI ID',
+                            _isPhone ? Icons.phone_outlined : Icons.alternate_email_rounded,
+                            hint: _isPhone ? '9876543210' : 'name@bank',
+                            suffixIcon: _isPhone
+                                ? IconButton(
+                                    tooltip: 'Choose from contacts',
+                                    onPressed: _pickContact,
+                                    icon: const Icon(Icons.contacts_rounded, color: AppColors.neonBlue, size: 20),
+                                  )
+                                : null,
+                          ),
+                          onChanged: (_) {
+                            if (_error != null) setState(() => _error = null);
+                            _schedulePrediction();
+                            _scheduleContactLookup();
+                          },
+                          validator: (value) {
+                            final text = value?.trim() ?? '';
+                            if (text.isEmpty) {
+                              return _isPhone ? 'Please enter a phone number' : 'Please enter a UPI ID';
+                            }
+                            if (_isPhone) {
+                              final digits = text.replaceAll(RegExp(r'[^0-9]'), '');
+                              if (digits.length < 10 || digits.length > 13) {
+                                return 'Enter a valid phone number';
+                              }
+                            } else if (!RegExp(r'^[a-zA-Z0-9._-]{2,}@[a-zA-Z]{2,}$').hasMatch(text)) {
+                              return 'Enter a valid UPI ID (like name@bank)';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _payeeNameController,
+                          maxLength: 255,
+                          textInputAction: TextInputAction.next,
+                          textCapitalization: TextCapitalization.words,
+                          style: const TextStyle(color: AppColors.textPrimary),
+                          decoration:
+                              appInputDecoration(
+                                _isPhone ? 'Payee name' : 'Payee name (optional)',
+                                Icons.person_outline_rounded,
+                                hint: _isPhone ? 'From your contacts' : 'Name shown in your UPI app',
+                              ).copyWith(
+                                counterText: '',
+                                suffixIcon: _lookingUpContact
+                                    ? const Padding(
+                                        padding: EdgeInsets.only(right: 14),
+                                        child: SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(strokeWidth: 1.6, color: AppColors.neonBlue),
+                                        ),
+                                      )
+                                    : null,
+                              ),
+                          onChanged: (_) {
+                            _autoFilledContactName = null;
+                            setState(() {
+                              if (_error != null) _error = null;
+                            });
+                            _schedulePrediction();
+                          },
+                        ),
+                        if (!_isScanned && _detectedPayeeName != null) ...[
+                          const SizedBox(height: 8),
+                          _DetectedPayeeChip(name: _detectedPayeeName!, icon: _detectedPayeeIcon),
+                        ],
+                      ],
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          const PaymentSectionLabel(label: 'Amount'),
+                          const Spacer(),
+                          if (amount != null)
+                            Text(
+                              'Paying with UPI',
+                              style: TextStyle(
+                                color: AppColors.textMuted.withValues(alpha: 0.85),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      TextFormField(
+                        controller: _amountController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.8,
+                        ),
+                        decoration: appInputDecoration(
+                          'Amount',
+                          Icons.currency_rupee_rounded,
+                          hint: '0.00',
+                        ).copyWith(contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14)),
+                        onChanged: (_) {
+                          setState(() {
+                            if (_error != null) _error = null;
+                          });
+                        },
+                        validator: (value) {
+                          final text = value?.trim().replaceAll(',', '') ?? '';
+                          if (text.isEmpty) return 'Please enter an amount';
+                          final amount = double.tryParse(text);
+                          if (amount == null || amount <= 0) {
+                            return 'Enter a valid amount';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          for (final quick in const <int>[100, 500, 1000, 2000]) ...[
+                            Expanded(
+                              child: _QuickAmountChip(amount: quick, onTap: () => _setQuickAmount(quick)),
+                            ),
+                            if (quick != 2000) const SizedBox(width: 8),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      const PaymentSectionLabel(label: 'Details'),
+                      const SizedBox(height: 10),
+                      TextFormField(
+                        controller: _noteController,
+                        minLines: 1,
+                        maxLines: 2,
+                        maxLength: 2048,
+                        textInputAction: TextInputAction.done,
+                        textCapitalization: TextCapitalization.sentences,
+                        style: const TextStyle(color: AppColors.textPrimary),
+                        decoration: appInputDecoration(
+                          'Note (optional)',
+                          Icons.notes_rounded,
+                          hint: 'What is this payment for?',
+                        ).copyWith(counterText: ''),
+                        onChanged: (_) {
+                          if (_error != null) setState(() => _error = null);
+                          _schedulePrediction();
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      _buildCategorySection(categories),
+                      const SizedBox(height: 12),
+                      _BankBalanceToggle(selected: _updateBankBalance, onTap: _toggleBankBalance),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(22, 12, 22, 12),
+              decoration: const BoxDecoration(
+                color: AppColors.surface,
+                border: Border(top: BorderSide(color: AppColors.border)),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_error != null) ...[_ErrorBanner(message: _error!), const SizedBox(height: 10)],
+                    NeonButton(
+                      label: amount == null ? 'Pay with UPI' : 'Pay ${formatInr(amount)}',
+                      icon: Icons.bolt_rounded,
+                      loading: _submitting,
+                      onPressed: _submitting ? null : _pay,
+                      height: 52,
+                    ),
+                    const SizedBox(height: 10),
+                    const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.lock_outline_rounded, size: 12, color: AppColors.textMuted),
+                        SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            'Saved to your records first, then completed in your UPI app.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: AppColors.textMuted, fontSize: 10.5, height: 1.4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -716,7 +705,7 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
         ),
       ),
       error: (error, stackTrace) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: AppColors.background.withValues(alpha: 0.55),
           borderRadius: BorderRadius.circular(12),
@@ -800,7 +789,17 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
                     for (final category in list)
                       DropdownMenuItem<String>(
                         value: category.code,
-                        child: Text(category.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        child: Row(
+                          children: [
+                            Icon(
+                              paymentCategoryIcon(code: category.code, name: category.name),
+                              color: AppColors.neonBlue,
+                              size: 15,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(category.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                          ],
+                        ),
                       ),
                   ],
                   onChanged: (value) {
@@ -813,17 +812,23 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
                 ),
               ),
             ),
-            if (_autoSuggestedName != null) ...[
-              const SizedBox(height: 8),
+            if (_autoSuggestedName != null || _predicting) ...[
+              const SizedBox(height: 9),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.auto_awesome_rounded, color: AppColors.neonBlue, size: 13),
-                  const SizedBox(width: 5),
+                  Icon(
+                    _predicting ? Icons.sync_rounded : Icons.auto_awesome_rounded,
+                    color: AppColors.neonBlue,
+                    size: 14,
+                  ),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'AI suggested: $_autoSuggestedName. You can change it.',
-                      style: const TextStyle(color: AppColors.textMuted, fontSize: 11, height: 1.35),
+                      _predicting
+                          ? 'Predicting the best category...'
+                          : 'Auto-suggested from the payee. Tap the field to change it.',
+                      style: const TextStyle(color: AppColors.textMuted, fontSize: 10.5, height: 1.4),
                     ),
                   ),
                 ],
@@ -832,6 +837,230 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
           ],
         );
       },
+    );
+  }
+}
+
+class _ScannedPayeeCard extends StatelessWidget {
+  const _ScannedPayeeCard({required this.scanned});
+
+  final UpiPayment scanned;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = scanned.payeeName?.trim();
+    final label = (name == null || name.isEmpty) ? scanned.payeeVpa : name;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.neonBlue.withValues(alpha: 0.16), AppColors.surface],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.neonBlue.withValues(alpha: 0.26)),
+      ),
+      child: Row(
+        children: [
+          PaymentAvatar(label: label, size: 46),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 14.5, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    const Icon(Icons.alternate_email_rounded, color: AppColors.textMuted, size: 12),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        scanned.payeeVpa,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: AppColors.textMuted, fontSize: 11.5),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          const PaymentPill(label: 'Scanned', icon: Icons.qr_code_2_rounded, fontSize: 9.5),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetectedPayeeChip extends StatelessWidget {
+  const _DetectedPayeeChip({required this.name, required this.icon});
+
+  final String name;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.neonBlue.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: AppColors.neonBlue.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: AppColors.neonBlueBright, size: 14),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: AppColors.neonBlueBright, fontSize: 11, fontWeight: FontWeight.w700),
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Text(
+            'FROM CONTACTS',
+            style: TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 8.5,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickAmountChip extends StatelessWidget {
+  const _QuickAmountChip({required this.amount, required this.onTap});
+
+  final int amount;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(vertical: 9),
+          decoration: BoxDecoration(
+            color: AppColors.background.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Text(
+            '₹$amount',
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 11.5, fontWeight: FontWeight.w700),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BankBalanceToggle extends StatelessWidget {
+  const _BankBalanceToggle({required this.selected, required this.onTap});
+
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(13, 11, 9, 11),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.neonBlue.withValues(alpha: 0.08) : AppColors.background.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: selected ? AppColors.neonBlue.withValues(alpha: 0.35) : AppColors.border),
+          ),
+          child: Row(
+            children: [
+              PaymentIconBadge(
+                icon: Icons.account_balance_wallet_rounded,
+                size: 36,
+                radius: 11,
+                color: selected ? AppColors.neonBlue : AppColors.textMuted,
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Update bank balance',
+                      style: TextStyle(color: AppColors.textPrimary, fontSize: 12.5, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Add this payment to your tracked balance.',
+                      style: TextStyle(color: AppColors.textMuted.withValues(alpha: 0.9), fontSize: 10.5, height: 1.4),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: selected,
+                onChanged: (_) => onTap(),
+                thumbColor: const WidgetStatePropertyAll<Color>(Colors.black),
+                trackColor: WidgetStateProperty.resolveWith<Color>(
+                  (states) => states.contains(WidgetState.selected) ? AppColors.neonBlue : AppColors.border,
+                ),
+                trackOutlineColor: const WidgetStatePropertyAll<Color>(Colors.transparent),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ErrorBanner extends StatelessWidget {
+  const _ErrorBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(11),
+      decoration: BoxDecoration(
+        color: AppColors.expense.withValues(alpha: 0.09),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.expense.withValues(alpha: 0.32)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline_rounded, color: AppColors.expense, size: 17),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(message, style: const TextStyle(color: AppColors.expense, fontSize: 11.5, height: 1.4)),
+          ),
+        ],
+      ),
     );
   }
 }

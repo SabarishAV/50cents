@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'package:_50cents/core/theme/app_colors.dart';
 import 'package:_50cents/core/theme/app_inputs.dart';
+import 'package:_50cents/core/widgets/neon_button.dart';
 import 'package:_50cents/features/payments/data/contact_directory.dart';
+import 'package:_50cents/features/payments/presentation/widgets/payment_ui.dart';
 
 /// Opens a searchable contact picker and returns the selected phone number.
 Future<String?> showContactPicker(BuildContext context) {
@@ -42,6 +44,11 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
     setState(() => _contactsFuture = ContactDirectory.load(refresh: true));
   }
 
+  void _clearSearch() {
+    _searchController.clear();
+    setState(() => _query = '');
+  }
+
   List<ContactEntry> _filter(List<ContactEntry> entries) {
     final query = _query.trim().toLowerCase();
     if (query.isEmpty) return entries;
@@ -59,52 +66,35 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
     final bottomInset = media.viewInsets.bottom;
-    // Keep the sheet fully on screen while the keyboard is open.
-    final sheetHeight = (media.size.height - bottomInset) * 0.9;
+    final height = (media.size.height - bottomInset) * 0.9;
 
     return Padding(
       padding: EdgeInsets.only(bottom: bottomInset),
-      child: Container(
-        height: sheetHeight,
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          border: Border(top: BorderSide(color: AppColors.border)),
-        ),
+      child: PaymentSheetShell(
+        height: height,
         child: SafeArea(
           top: false,
           child: Column(
             children: [
-              Center(
-                child: Container(
-                  width: 42,
-                  height: 4,
-                  margin: const EdgeInsets.only(top: 12, bottom: 18),
-                  decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(4)),
-                ),
-              ),
+              const PaymentSheetHandle(),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 22),
+                padding: const EdgeInsets.fromLTRB(22, 0, 14, 0),
                 child: Row(
                   children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: AppColors.neonBlue.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(13),
-                        border: Border.all(color: AppColors.neonBlue.withValues(alpha: 0.3)),
-                      ),
-                      child: const Icon(Icons.contacts_rounded, color: AppColors.neonBlue, size: 21),
-                    ),
-                    const SizedBox(width: 13),
+                    const PaymentIconBadge(icon: Icons.contacts_rounded, size: 42, radius: 13),
+                    const SizedBox(width: 12),
                     const Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             'Choose a contact',
-                            style: TextStyle(color: AppColors.textPrimary, fontSize: 17, fontWeight: FontWeight.w700),
+                            style: TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.2,
+                            ),
                           ),
                           SizedBox(height: 2),
                           Text(
@@ -114,26 +104,29 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
                         ],
                       ),
                     ),
+                    IconButton(
+                      tooltip: 'Close',
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close_rounded, color: AppColors.textMuted, size: 20),
+                    ),
                   ],
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(22, 16, 22, 4),
+                padding: const EdgeInsets.fromLTRB(22, 14, 22, 6),
                 child: TextField(
                   controller: _searchController,
                   autofocus: true,
                   onChanged: (value) => setState(() => _query = value),
-                  style: const TextStyle(color: AppColors.textPrimary),
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
                   decoration: appInputDecoration('Search contacts', Icons.search_rounded).copyWith(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                     suffixIcon: _query.isEmpty
                         ? null
                         : IconButton(
                             tooltip: 'Clear',
                             icon: const Icon(Icons.close_rounded, color: AppColors.textMuted, size: 18),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() => _query = '');
-                            },
+                            onPressed: _clearSearch,
                           ),
                   ),
                 ),
@@ -143,47 +136,109 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
                   future: _contactsFuture,
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator(color: AppColors.neonBlue, strokeWidth: 2));
+                      return const _ContactListSkeleton();
                     }
 
                     final entries = snapshot.data ?? const <ContactEntry>[];
                     if (entries.isEmpty) {
-                      return _EmptyContacts(denied: ContactDirectory.permissionDenied, onRetry: _retry);
+                      return _ContactsPanel(
+                        icon: ContactDirectory.permissionDenied ? Icons.no_accounts_outlined : Icons.contacts_outlined,
+                        title: ContactDirectory.permissionDenied ? 'Contact access is off' : 'No contacts found',
+                        message: ContactDirectory.permissionDenied
+                            ? 'Allow contact access in your device settings to pick a payee by name.'
+                            : 'Add contacts to your device to pay them by name or number.',
+                        actionLabel: ContactDirectory.permissionDenied ? 'Try again' : null,
+                        onAction: ContactDirectory.permissionDenied ? _retry : null,
+                      );
                     }
 
                     final filtered = _filter(entries);
                     if (filtered.isEmpty) {
-                      return const _NoMatches();
+                      return _ContactsPanel(
+                        icon: Icons.search_off_rounded,
+                        title: 'No matches',
+                        message: 'No contacts match “${_query.trim()}”. Try a different name or number.',
+                      );
                     }
 
                     return ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(14, 6, 14, 18),
+                      padding: const EdgeInsets.fromLTRB(14, 8, 14, 18),
                       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, _) =>
-                          const Divider(height: 1, color: AppColors.border, indent: 62, endIndent: 14),
+                      itemCount: filtered.length + 1,
+                      separatorBuilder: (_, index) => const SizedBox(height: 2),
                       itemBuilder: (context, index) {
-                        final entry = filtered[index];
-                        return ListTile(
-                          onTap: () => Navigator.of(context).pop(entry.digits),
-                          leading: _ContactAvatar(name: entry.name),
-                          title: Text(
-                            entry.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
+                        if (index == 0) {
+                          return Padding(
+                            padding: const EdgeInsets.fromLTRB(8, 4, 8, 10),
+                            child: Row(
+                              children: [
+                                Text(
+                                  '${filtered.length} ${filtered.length == 1 ? 'contact' : 'contacts'}',
+                                  style: const TextStyle(
+                                    color: AppColors.textMuted,
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.6,
+                                  ),
+                                ),
+                                const Spacer(),
+                                const Icon(Icons.sort_rounded, color: AppColors.textMuted, size: 13),
+                                const SizedBox(width: 4),
+                                const Text(
+                                  'A–Z',
+                                  style: TextStyle(
+                                    color: AppColors.textMuted,
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+
+                        final entry = filtered[index - 1];
+                        return Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () => Navigator.of(context).pop(entry.digits),
+                            borderRadius: BorderRadius.circular(14),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+                              child: Row(
+                                children: [
+                                  PaymentAvatar(label: entry.name, size: 42),
+                                  const SizedBox(width: 13),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          entry.name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            color: AppColors.textPrimary,
+                                            fontSize: 13.5,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          entry.digits,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(color: AppColors.textMuted, fontSize: 11.5),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Icon(Icons.arrow_outward_rounded, color: AppColors.textMuted, size: 15),
+                                ],
+                              ),
                             ),
                           ),
-                          subtitle: Text(
-                            entry.digits,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
-                          ),
-                          trailing: const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.textMuted, size: 12),
                         );
                       },
                     );
@@ -198,74 +253,51 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
   }
 }
 
-class _ContactAvatar extends StatelessWidget {
-  const _ContactAvatar({required this.name});
-
-  final String name;
-
-  String get _initials {
-    final parts = name.trim().split(RegExp(r'\s+')).where((part) => part.isNotEmpty).toList();
-    if (parts.isEmpty) return '?';
-    String first(String value) => value.substring(0, 1).toUpperCase();
-    if (parts.length == 1) return first(parts.first);
-    return '${first(parts.first)}${first(parts[1])}';
-  }
+class _ContactListSkeleton extends StatelessWidget {
+  const _ContactListSkeleton();
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 40,
-      height: 40,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: AppColors.neonBlue.withValues(alpha: 0.12),
-        shape: BoxShape.circle,
-        border: Border.all(color: AppColors.neonBlue.withValues(alpha: 0.25)),
-      ),
-      child: Text(
-        _initials,
-        style: const TextStyle(color: AppColors.neonBlue, fontSize: 13, fontWeight: FontWeight.w700),
-      ),
-    );
-  }
-}
-
-class _EmptyContacts extends StatelessWidget {
-  const _EmptyContacts({required this.denied, required this.onRetry});
-
-  final bool denied;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(22, 16, 22, 18),
+      itemCount: 7,
+      itemBuilder: (context, index) => Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Row(
           children: [
-            Icon(denied ? Icons.no_accounts_outlined : Icons.contacts_outlined, color: AppColors.textMuted, size: 42),
-            const SizedBox(height: 14),
-            Text(
-              denied ? 'Contact access is off' : 'No contacts found',
-              style: const TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w700),
+            Container(
+              width: 42,
+              height: 42,
+              decoration: const BoxDecoration(color: AppColors.border, shape: BoxShape.circle),
             ),
-            const SizedBox(height: 6),
-            Text(
-              denied
-                  ? 'Allow contact access in your device settings to pick a payee by name.'
-                  : 'Add contacts to your device to pay them by name or number.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 12.5, height: 1.45),
-            ),
-            if (denied) ...[
-              const SizedBox(height: 14),
-              TextButton(
-                onPressed: onRetry,
-                style: TextButton.styleFrom(foregroundColor: AppColors.neonBlue),
-                child: const Text('Try again'),
+            const SizedBox(width: 13),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  FractionallySizedBox(
+                    alignment: Alignment.centerLeft,
+                    widthFactor: 0.55,
+                    child: Container(
+                      height: 11,
+                      decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(6)),
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  FractionallySizedBox(
+                    alignment: Alignment.centerLeft,
+                    widthFactor: 0.3,
+                    child: Container(
+                      height: 9,
+                      decoration: BoxDecoration(
+                        color: AppColors.border.withValues(alpha: 0.7),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ],
         ),
       ),
@@ -273,20 +305,49 @@ class _EmptyContacts extends StatelessWidget {
   }
 }
 
-class _NoMatches extends StatelessWidget {
-  const _NoMatches();
+class _ContactsPanel extends StatelessWidget {
+  const _ContactsPanel({
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.all(32),
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.search_off_rounded, color: AppColors.textMuted, size: 40),
-            SizedBox(height: 12),
-            Text('No contacts match your search', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+            PaymentIconBadge(icon: icon, size: 62, radius: 20, color: AppColors.textMuted),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.textPrimary, fontSize: 15.5, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 7),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 12.5, height: 1.5),
+            ),
+            if (actionLabel != null && onAction != null) ...[
+              const SizedBox(height: 18),
+              SizedBox(
+                width: 158,
+                child: NeonButton(label: actionLabel!, icon: Icons.refresh_rounded, onPressed: onAction, height: 46),
+              ),
+            ],
           ],
         ),
       ),

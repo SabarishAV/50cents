@@ -7,6 +7,7 @@ import 'package:_50cents/core/network/api_exception.dart';
 import 'models/create_payment_record_request.dart';
 import 'models/payment_category.dart';
 import 'models/payment_record.dart';
+import 'models/payment_summary.dart';
 import 'models/update_payment_record_request.dart';
 
 final paymentRepositoryProvider = Provider<PaymentRepository>((ref) {
@@ -93,6 +94,52 @@ final paymentRecordsProvider = FutureProvider.family<PaymentRecordsPage, Payment
   return ref.read(paymentRepositoryProvider).listPaymentRecords(query);
 });
 
+/// Date filters for `GET /payment-records/summary`.
+class PaymentSummaryQuery {
+  const PaymentSummaryQuery({
+    required this.year,
+    required this.month,
+    required this.toYear,
+    required this.toMonth,
+    required this.onlyThisMonth,
+  });
+
+  final int year;
+  final int month;
+  final int toYear;
+  final int toMonth;
+  final bool onlyThisMonth;
+
+  Map<String, dynamic> toQueryParameters() {
+    return <String, dynamic>{
+      'year': year,
+      'month': month,
+      'toYear': toYear,
+      'toMonth': toMonth,
+      'onlyThisMonth': onlyThisMonth ? 'true' : 'false',
+    };
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(other, this)) return true;
+    return other is PaymentSummaryQuery &&
+        other.year == year &&
+        other.month == month &&
+        other.toYear == toYear &&
+        other.toMonth == toMonth &&
+        other.onlyThisMonth == onlyThisMonth;
+  }
+
+  @override
+  int get hashCode => Object.hash(year, month, toYear, toMonth, onlyThisMonth);
+}
+
+/// Totals for the selected period, independent of paging.
+final paymentSummaryProvider = FutureProvider.family<PaymentSummary, PaymentSummaryQuery>((ref, query) {
+  return ref.read(paymentRepositoryProvider).getPaymentSummary(query);
+});
+
 /// Data layer for payment records and category lookup.
 class PaymentRepository {
   PaymentRepository(this._dio);
@@ -153,6 +200,18 @@ class PaymentRepository {
     }
 
     return PaymentRecordsPage.fromJson(Map<String, dynamic>.from(payload), fallbackPageNumber: query.pageNumber);
+  }
+
+  /// GET /payment-records/summary
+  Future<PaymentSummary> getPaymentSummary(PaymentSummaryQuery query) async {
+    final response = await _dio.get<dynamic>('/payment-records/summary', queryParameters: query.toQueryParameters());
+    final payload = response.data;
+
+    if (payload is! Map) {
+      throw ApiException('Unexpected response from the server.');
+    }
+
+    return PaymentSummary.fromJson(Map<String, dynamic>.from(payload));
   }
 
   /// POST /payment-records
