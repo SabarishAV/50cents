@@ -18,6 +18,8 @@ class AuthState {
   final bool isLoggingIn;
   final bool isGoogleSigningIn;
   final bool isChangingPassword;
+  final bool isRequestingEmailChange;
+  final bool isVerifyingEmailChange;
   final String? error;
 
   /// Per-field validation messages from the API keyed by field name.
@@ -32,6 +34,8 @@ class AuthState {
     this.isLoggingIn = false,
     this.isGoogleSigningIn = false,
     this.isChangingPassword = false,
+    this.isRequestingEmailChange = false,
+    this.isVerifyingEmailChange = false,
     this.error,
     this.fieldErrors = const <String, String>{},
     this.session,
@@ -45,6 +49,8 @@ class AuthState {
     bool? isLoggingIn,
     bool? isGoogleSigningIn,
     bool? isChangingPassword,
+    bool? isRequestingEmailChange,
+    bool? isVerifyingEmailChange,
     Object? error = _unset,
     Object? fieldErrors = _unset,
     Object? session = _unset,
@@ -55,6 +61,8 @@ class AuthState {
       isLoggingIn: isLoggingIn ?? this.isLoggingIn,
       isGoogleSigningIn: isGoogleSigningIn ?? this.isGoogleSigningIn,
       isChangingPassword: isChangingPassword ?? this.isChangingPassword,
+      isRequestingEmailChange: isRequestingEmailChange ?? this.isRequestingEmailChange,
+      isVerifyingEmailChange: isVerifyingEmailChange ?? this.isVerifyingEmailChange,
       error: identical(error, _unset) ? this.error : error as String?,
       fieldErrors: identical(fieldErrors, _unset) ? this.fieldErrors : fieldErrors as Map<String, String>,
       session: identical(session, _unset) ? this.session : session as AuthSession?,
@@ -105,6 +113,8 @@ class AuthNotifier extends Notifier<AuthState> {
       isLoggingIn: false,
       isGoogleSigningIn: false,
       isChangingPassword: false,
+      isRequestingEmailChange: false,
+      isVerifyingEmailChange: false,
       error: null,
     );
     try {
@@ -172,7 +182,13 @@ class AuthNotifier extends Notifier<AuthState> {
   /// currentPassword is optional (for Google OAuth users).
   /// Returns `true` when the password was changed successfully.
   Future<bool> changePassword({String? currentPassword, required String newPassword}) async {
-    state = state.copyWith(isChangingPassword: true, error: null, fieldErrors: const <String, String>{});
+    state = state.copyWith(
+      isChangingPassword: true,
+      isRequestingEmailChange: false,
+      isVerifyingEmailChange: false,
+      error: null,
+      fieldErrors: const <String, String>{},
+    );
     try {
       final response = await _repository.changePassword(currentPassword: currentPassword, newPassword: newPassword);
       state = state.copyWith(
@@ -198,6 +214,110 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
+  /// Request an email change via POST /user/email/change/request.
+  /// Sends an OTP to [email]. Returns `true` when the request was accepted.
+  Future<bool> requestEmailChange(String email) async {
+    state = state.copyWith(
+      isRequestingEmailChange: true,
+      isVerifyingEmailChange: false,
+      isRegistering: false,
+      isLoggingIn: false,
+      isGoogleSigningIn: false,
+      isChangingPassword: false,
+      error: null,
+      fieldErrors: const <String, String>{},
+    );
+    try {
+      final response = await _repository.requestEmailChange(email);
+      state = state.copyWith(
+        isRequestingEmailChange: false,
+        error: response.success
+            ? null
+            : (response.message?.isEmpty ?? true
+                  ? 'Could not send the verification code. Please try again.'
+                  : response.message),
+        fieldErrors: const <String, String>{},
+      );
+      return response.success;
+    } catch (e) {
+      final apiError = switch (e) {
+        ApiException apiError => apiError,
+        DioException dioError => ApiException.from(dioError),
+        _ => null,
+      };
+      state = state.copyWith(
+        isRequestingEmailChange: false,
+        error: _formatError(e),
+        fieldErrors: apiError?.fieldErrors ?? const <String, String>{},
+      );
+      return false;
+    }
+  }
+
+  /// Verify the OTP via POST /user/email/change/verify.
+  ///
+  /// On success the account email is now [newEmail]. The JWT is unchanged, so
+  /// the stored session claims and secure storage are patched to keep the UI in
+  /// sync with the server.
+  Future<bool> verifyEmailChange({required String otp, required String newEmail}) async {
+    state = state.copyWith(
+      isVerifyingEmailChange: true,
+      isRequestingEmailChange: false,
+      isRegistering: false,
+      isLoggingIn: false,
+      isGoogleSigningIn: false,
+      isChangingPassword: false,
+      error: null,
+      fieldErrors: const <String, String>{},
+    );
+    try {
+      final response = await _repository.verifyEmailChange(otp);
+      if (!response.success) {
+        state = state.copyWith(
+          isVerifyingEmailChange: false,
+          error: response.message?.isEmpty ?? true
+              ? 'Could not update your email. Please try again.'
+              : response.message,
+        );
+        return false;
+      }
+
+      await _applyEmailToSession(newEmail);
+      state = state.copyWith(isVerifyingEmailChange: false, error: null, fieldErrors: const <String, String>{});
+      return true;
+    } catch (e) {
+      final apiError = switch (e) {
+        ApiException apiError => apiError,
+        DioException dioError => ApiException.from(dioError),
+        _ => null,
+      };
+      state = state.copyWith(
+        isVerifyingEmailChange: false,
+        error: _formatError(e),
+        fieldErrors: apiError?.fieldErrors ?? const <String, String>{},
+      );
+      return false;
+    }
+  }
+
+  /// Replaces the `email` claim in the current session and persists it, so the
+  /// profile keeps showing the new address after a restart.
+  Future<void> _applyEmailToSession(String email) async {
+    final session = state.session;
+    if (session == null) return;
+
+    final claims = Map<String, dynamic>.from(session.claims)..['email'] = email;
+    final updated = AuthSession(token: session.token, claims: claims);
+
+    try {
+      await _tokenStorage.saveSession(updated);
+    } catch (_) {
+      // Keep the in-memory session in sync even if secure storage fails.
+    }
+
+    state = state.copyWith(session: updated);
+  }
+
   /// Persists the token + decoded claims and marks the user as signed in.
   Future<bool> _completeLogin({required bool success, required String? token, required String fallbackMessage}) async {
     if (!success || token == null || token.isEmpty) {
@@ -206,6 +326,8 @@ class AuthNotifier extends Notifier<AuthState> {
         isGoogleSigningIn: false,
         isRegistering: false,
         isChangingPassword: false,
+        isRequestingEmailChange: false,
+        isVerifyingEmailChange: false,
         error: fallbackMessage,
       );
       return false;

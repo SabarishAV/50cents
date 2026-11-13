@@ -20,6 +20,11 @@ jobs:
           channel: stable
           cache: true
 
+      # .env is gitignored, but it is declared as an asset in pubspec.yaml.
+      # Create one from the committed example so asset checks and analysis pass.
+      - name: Create .env
+        run: cp .env.example .env
+
       - name: Install dependencies
         run: flutter pub get
 

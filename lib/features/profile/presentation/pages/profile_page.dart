@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -11,6 +11,7 @@ import 'package:_50cents/features/auth/data/models/auth_session.dart';
 import 'package:_50cents/features/auth/presentation/providers/auth_provider.dart';
 import 'package:_50cents/features/auth/presentation/widgets/user_avatar.dart';
 import 'package:_50cents/features/home/presentation/widgets/app_bottom_nav.dart';
+import 'package:_50cents/features/profile/presentation/widgets/change_email_dialog.dart';
 import 'package:_50cents/features/profile/presentation/widgets/change_password_dialog.dart';
 
 /// Profile screen — account details, decoded token claims and logout.
@@ -102,7 +103,7 @@ class ProfilePage extends ConsumerWidget {
                         const SizedBox(height: 22),
                         _SessionStatusCard(session: session),
                         const SizedBox(height: 16),
-                        _AccountCard(session: session),
+                        _AccountCard(session: session, onChangeEmail: () => ChangeEmailDialog.show(context)),
                         const SizedBox(height: 16),
                         _SecurityCard(onChangePassword: () => ChangePasswordDialog.show(context)),
                         const SizedBox(height: 16),
@@ -257,9 +258,10 @@ class _SessionStatusCard extends StatelessWidget {
 }
 
 class _AccountCard extends StatelessWidget {
-  const _AccountCard({required this.session});
+  const _AccountCard({required this.session, required this.onChangeEmail});
 
   final AuthSession session;
+  final VoidCallback onChangeEmail;
 
   @override
   Widget build(BuildContext context) {
@@ -270,6 +272,20 @@ class _AccountCard extends StatelessWidget {
         _InfoRow(label: 'Name', value: session.name ?? session.displayName),
         if (session.email != null) _InfoRow(label: 'Email', value: session.email!),
         if (session.userId != null) _InfoRow(label: 'User ID', value: session.userId!, monospace: true),
+        const SizedBox(height: 2),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          minLeadingWidth: 0,
+          leading: const Icon(Icons.alternate_email_rounded, color: AppColors.textMuted, size: 20),
+          title: const Text('Change Email', style: TextStyle(color: AppColors.textPrimary, fontSize: 14)),
+          subtitle: const Text(
+            'Update the email linked to your account',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+          ),
+          trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+          onTap: onChangeEmail,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
       ],
     );
   }

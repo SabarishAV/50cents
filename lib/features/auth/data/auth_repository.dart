@@ -48,4 +48,21 @@ class AuthRepository {
     );
     return AuthResponse.fromJson(response.data);
   }
+
+  /// POST /user/email/change/request — Response: { success: true, message: "string" }
+  ///
+  /// Sends an OTP to the new email address. Like the password endpoint, the API
+  /// binds `ChangeEmailOtpRequest` from **query parameters**.
+  Future<AuthResponse> requestEmailChange(String email) async {
+    final response = await _dio.post('/user/email/change/request', queryParameters: <String, dynamic>{'email': email});
+    return AuthResponse.fromJson(response.data);
+  }
+
+  /// POST /user/email/change/verify — Response: { success: true, message: "string" }
+  ///
+  /// Confirms the OTP sent to the new email and updates the account email.
+  Future<AuthResponse> verifyEmailChange(String otp) async {
+    final response = await _dio.post('/user/email/change/verify', queryParameters: <String, dynamic>{'otp': otp});
+    return AuthResponse.fromJson(response.data);
+  }
 }

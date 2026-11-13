@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:_50cents/core/theme/app_colors.dart';
 
 /// A reusable background with dim neon blue vertical and horizontal lines

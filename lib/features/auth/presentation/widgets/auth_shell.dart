@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'package:_50cents/core/theme/app_colors.dart';
 import 'package:_50cents/core/widgets/app_logo.dart';
