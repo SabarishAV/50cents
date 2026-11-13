@@ -36,6 +36,8 @@ class AuthSession {
 
   String? get email => _stringClaim('email');
 
+  String? get username => _stringClaim('username') ?? _stringClaim('preferred_username') ?? _stringClaim('user_name');
+
   String? get name => _stringClaim('name') ?? _stringClaim('fullName') ?? _stringClaim('username');
 
   String? get avatarUrl => _stringClaim('picture') ?? _stringClaim('avatar');

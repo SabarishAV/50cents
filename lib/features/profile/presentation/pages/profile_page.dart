@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -15,7 +13,7 @@ import 'package:_50cents/features/profile/presentation/widgets/change_email_dial
 import 'package:_50cents/features/profile/presentation/widgets/change_password_dialog.dart';
 import 'package:_50cents/features/profile/presentation/widgets/delete_account_dialog.dart';
 
-/// Profile screen — account details, decoded token claims and logout.
+/// Profile screen — account details and logout.
 class ProfilePage extends ConsumerWidget {
   const ProfilePage({super.key});
 
@@ -66,7 +64,7 @@ class ProfilePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(authProvider).session;
 
-    return NeonBackground(
+    final content = NeonBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
         body: session == null
@@ -111,7 +109,6 @@ class ProfilePage extends ConsumerWidget {
                           onChangePassword: () => ChangePasswordDialog.show(context),
                         ),
                         const SizedBox(height: 16),
-                        if (session.claims.isNotEmpty) ...[_ClaimsCard(session: session), const SizedBox(height: 16)],
                         SizedBox(
                           height: 52,
                           child: OutlinedButton.icon(
@@ -151,6 +148,16 @@ class ProfilePage extends ConsumerWidget {
               ),
         bottomNavigationBar: const AppBottomNav(current: AppTab.profile),
       ),
+    );
+
+    // Back from the profile tab returns to home instead of closing the app.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        context.go('/home');
+      },
+      child: content,
     );
   }
 }
@@ -241,8 +248,8 @@ class _SessionStatusCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final expiry = session.expiresAt?.toLocal();
     final subtitle = expiry == null
-        ? 'Your token is stored securely on this device.'
-        : 'Token valid until ${_formatDate(expiry)}';
+        ? 'You are signed in and ready to use 50cents.'
+        : 'Signed in until ${_formatDate(expiry)}';
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -292,7 +299,7 @@ class _AccountCard extends StatelessWidget {
       children: [
         _InfoRow(label: 'Name', value: session.name ?? session.displayName),
         if (session.email != null) _InfoRow(label: 'Email', value: session.email!),
-        if (session.userId != null) _InfoRow(label: 'User ID', value: session.userId!, monospace: true),
+        _InfoRow(label: 'Username', value: session.username ?? session.displayName),
       ],
     );
   }
@@ -341,67 +348,6 @@ class _SecurityCard extends StatelessWidget {
   }
 }
 
-class _ClaimsCard extends StatelessWidget {
-  const _ClaimsCard({required this.session});
-
-  final AuthSession session;
-
-  @override
-  Widget build(BuildContext context) {
-    final pretty = const JsonEncoder.withIndent('  ').convert(session.claims);
-
-    return Material(
-      color: AppColors.surface,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: AppColors.border),
-      ),
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          iconColor: AppColors.neonBlue,
-          collapsedIconColor: AppColors.textMuted,
-          tilePadding: const EdgeInsets.symmetric(horizontal: 18),
-          childrenPadding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
-          leading: const Icon(Icons.data_object_rounded, color: AppColors.textMuted, size: 20),
-          title: const Text(
-            'Decoded token claims',
-            style: TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600),
-          ),
-          subtitle: const Text(
-            'Stored locally and ready for later use',
-            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-          ),
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Text(
-                  pretty,
-                  style: const TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 11,
-                    height: 1.5,
-                    fontFamily: 'monospace',
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _Card extends StatelessWidget {
   const _Card({required this.title, required this.icon, required this.children});
 
@@ -446,11 +392,10 @@ class _Card extends StatelessWidget {
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value, this.monospace = false});
+  const _InfoRow({required this.label, required this.value});
 
   final String label;
   final String value;
-  final bool monospace;
 
   @override
   Widget build(BuildContext context) {
@@ -464,10 +409,7 @@ class _InfoRow extends StatelessWidget {
             child: Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: TextStyle(color: AppColors.textPrimary, fontSize: 13, fontFamily: monospace ? 'monospace' : null),
-            ),
+            child: Text(value, style: const TextStyle(color: AppColors.textPrimary, fontSize: 13)),
           ),
         ],
       ),

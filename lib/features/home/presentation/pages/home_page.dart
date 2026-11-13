@@ -1,4 +1,5 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -21,7 +22,7 @@ class HomePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(authProvider).session;
 
-    return NeonBackground(
+    final content = NeonBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
         body: session == null
@@ -81,6 +82,16 @@ class HomePage extends ConsumerWidget {
               ),
         bottomNavigationBar: const AppBottomNav(current: AppTab.home),
       ),
+    );
+
+    // Home is the app's root screen, so back here closes the app.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        SystemNavigator.pop();
+      },
+      child: content,
     );
   }
 }

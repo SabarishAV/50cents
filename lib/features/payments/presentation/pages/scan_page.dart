@@ -19,9 +19,8 @@ class ScanPage extends StatefulWidget {
   State<ScanPage> createState() => _ScanPageState();
 }
 
-class _ScanPageState extends State<ScanPage> with SingleTickerProviderStateMixin {
+class _ScanPageState extends State<ScanPage> {
   late final MobileScannerController _controller;
-  late final AnimationController _laserController;
 
   bool _handled = false;
   bool _torchOn = false;
@@ -35,13 +34,11 @@ class _ScanPageState extends State<ScanPage> with SingleTickerProviderStateMixin
       detectionSpeed: DetectionSpeed.noDuplicates,
       formats: const [BarcodeFormat.qrCode],
     );
-    _laserController = AnimationController(vsync: this, duration: const Duration(milliseconds: 2400))..repeat();
   }
 
   @override
   void dispose() {
     _messageTimer?.cancel();
-    _laserController.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -180,14 +177,9 @@ class _ScanPageState extends State<ScanPage> with SingleTickerProviderStateMixin
             },
           ),
 
-          // Dims everything outside the scan window and animates a laser sweep.
+          // Dims everything outside the scan window.
           Positioned.fill(
-            child: IgnorePointer(
-              child: AnimatedBuilder(
-                animation: _laserController,
-                builder: (context, _) => CustomPaint(painter: _ScanOverlayPainter(progress: _laserController.value)),
-              ),
-            ),
+            child: IgnorePointer(child: CustomPaint(painter: const _ScanOverlayPainter())),
           ),
 
           // A soft vignette keeps the header and footer readable over the camera.
@@ -491,9 +483,7 @@ class _ScanTip extends StatelessWidget {
 }
 
 class _ScanOverlayPainter extends CustomPainter {
-  const _ScanOverlayPainter({required this.progress});
-
-  final double progress;
+  const _ScanOverlayPainter();
 
   static const double _cornerRadius = 26;
   static const double _bracketArm = 30;
@@ -528,26 +518,6 @@ class _ScanOverlayPainter extends CustomPainter {
         stops: const [0.0, 0.9],
       ).createShader(rect);
     canvas.drawRect(rect, glow);
-
-    // Sweeping laser.
-    final laserY = rect.top + 18 + (rect.height - 36) * progress;
-    final laserRect = Rect.fromLTWH(rect.left, laserY - 26, rect.width, 52);
-    final laserPaint = Paint()
-      ..shader = const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [Colors.transparent, Color(0x5500B4FF), Colors.transparent],
-        stops: [0.0, 0.5, 1.0],
-      ).createShader(laserRect);
-    canvas.drawRect(laserRect, laserPaint);
-    canvas.drawLine(
-      Offset(rect.left + 12, laserY),
-      Offset(rect.right - 12, laserY),
-      Paint()
-        ..color = AppColors.neonBlueBright.withValues(alpha: 0.85)
-        ..strokeWidth = 1.6
-        ..strokeCap = StrokeCap.round,
-    );
 
     canvas.restore();
 
@@ -609,5 +579,5 @@ class _ScanOverlayPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _ScanOverlayPainter oldDelegate) => oldDelegate.progress != progress;
+  bool shouldRepaint(covariant _ScanOverlayPainter oldDelegate) => false;
 }
