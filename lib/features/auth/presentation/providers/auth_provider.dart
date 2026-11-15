@@ -22,6 +22,8 @@ class AuthState {
   final bool isVerifyingEmailChange;
   final bool isRequestingAccountDeletion;
   final bool isVerifyingAccountDeletion;
+  final bool isRequestingPasswordReset;
+  final bool isResettingPassword;
   final String? error;
 
   /// Per-field validation messages from the API keyed by field name.
@@ -40,6 +42,8 @@ class AuthState {
     this.isVerifyingEmailChange = false,
     this.isRequestingAccountDeletion = false,
     this.isVerifyingAccountDeletion = false,
+    this.isRequestingPasswordReset = false,
+    this.isResettingPassword = false,
     this.error,
     this.fieldErrors = const <String, String>{},
     this.session,
@@ -57,6 +61,8 @@ class AuthState {
     bool? isVerifyingEmailChange,
     bool? isRequestingAccountDeletion,
     bool? isVerifyingAccountDeletion,
+    bool? isRequestingPasswordReset,
+    bool? isResettingPassword,
     Object? error = _unset,
     Object? fieldErrors = _unset,
     Object? session = _unset,
@@ -71,6 +77,8 @@ class AuthState {
       isVerifyingEmailChange: isVerifyingEmailChange ?? this.isVerifyingEmailChange,
       isRequestingAccountDeletion: isRequestingAccountDeletion ?? this.isRequestingAccountDeletion,
       isVerifyingAccountDeletion: isVerifyingAccountDeletion ?? this.isVerifyingAccountDeletion,
+      isRequestingPasswordReset: isRequestingPasswordReset ?? this.isRequestingPasswordReset,
+      isResettingPassword: isResettingPassword ?? this.isResettingPassword,
       error: identical(error, _unset) ? this.error : error as String?,
       fieldErrors: identical(fieldErrors, _unset) ? this.fieldErrors : fieldErrors as Map<String, String>,
       session: identical(session, _unset) ? this.session : session as AuthSession?,
@@ -184,6 +192,99 @@ class AuthNotifier extends Notifier<AuthState> {
       );
     } catch (e) {
       state = state.copyWith(isLoggingIn: false, error: _formatError(e));
+      return false;
+    }
+  }
+
+  /// Request a password-reset OTP via POST /auth/forgot-password/request.
+  ///
+  /// Sends a 6-digit code to the email registered to [identifier] (username or
+  /// email). Returns `true` when the request was accepted.
+  Future<bool> requestPasswordReset(String identifier) async {
+    state = state.copyWith(
+      isRequestingPasswordReset: true,
+      isResettingPassword: false,
+      isRegistering: false,
+      isLoggingIn: false,
+      isGoogleSigningIn: false,
+      isChangingPassword: false,
+      isRequestingEmailChange: false,
+      isVerifyingEmailChange: false,
+      isRequestingAccountDeletion: false,
+      isVerifyingAccountDeletion: false,
+      error: null,
+      fieldErrors: const <String, String>{},
+    );
+    try {
+      final response = await _repository.requestPasswordReset(identifier);
+      state = state.copyWith(
+        isRequestingPasswordReset: false,
+        error: response.success
+            ? null
+            : (response.message?.isEmpty ?? true
+                  ? 'Could not send the reset code. Please try again.'
+                  : response.message),
+        fieldErrors: const <String, String>{},
+      );
+      return response.success;
+    } catch (e) {
+      final apiError = switch (e) {
+        ApiException apiError => apiError,
+        DioException dioError => ApiException.from(dioError),
+        _ => null,
+      };
+      state = state.copyWith(
+        isRequestingPasswordReset: false,
+        error: _formatError(e),
+        fieldErrors: apiError?.fieldErrors ?? const <String, String>{},
+      );
+      return false;
+    }
+  }
+
+  /// Reset the password via POST /auth/forgot-password/verify.
+  ///
+  /// The response carries no token, so the user is sent back to the login
+  /// screen to sign in with the new password. Returns `true` when the password
+  /// was changed.
+  Future<bool> verifyPasswordReset({required String identifier, required String otp, required String password}) async {
+    state = state.copyWith(
+      isResettingPassword: true,
+      isRequestingPasswordReset: false,
+      isRegistering: false,
+      isLoggingIn: false,
+      isGoogleSigningIn: false,
+      isChangingPassword: false,
+      isRequestingEmailChange: false,
+      isVerifyingEmailChange: false,
+      isRequestingAccountDeletion: false,
+      isVerifyingAccountDeletion: false,
+      error: null,
+      fieldErrors: const <String, String>{},
+    );
+    try {
+      final response = await _repository.verifyPasswordReset(identifier: identifier, otp: otp, password: password);
+      state = state.copyWith(
+        isResettingPassword: false,
+        error: response.success
+            ? null
+            : (response.message?.isEmpty ?? true
+                  ? 'Could not reset your password. Please try again.'
+                  : response.message),
+        fieldErrors: const <String, String>{},
+      );
+      return response.success;
+    } catch (e) {
+      final apiError = switch (e) {
+        ApiException apiError => apiError,
+        DioException dioError => ApiException.from(dioError),
+        _ => null,
+      };
+      state = state.copyWith(
+        isResettingPassword: false,
+        error: _formatError(e),
+        fieldErrors: apiError?.fieldErrors ?? const <String, String>{},
+      );
       return false;
     }
   }

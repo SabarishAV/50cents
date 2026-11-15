@@ -28,6 +28,34 @@ class AuthRepository {
     return AuthResponse.fromJson(response.data);
   }
 
+  /// POST /auth/forgot-password/request — Response: { success: true, message: "string" }
+  ///
+  /// Sends a 6-digit OTP to the account's registered email. The API binds
+  /// `ForgotPasswordRequest` from **query parameters** (not a JSON body).
+  Future<AuthResponse> requestPasswordReset(String identifier) async {
+    final response = await _dio.post(
+      '/auth/forgot-password/request',
+      queryParameters: <String, dynamic>{'identifier': identifier},
+    );
+    return AuthResponse.fromJson(response.data);
+  }
+
+  /// POST /auth/forgot-password/verify — Response: { success: true, message: "string" }
+  ///
+  /// Confirms the OTP and sets the new password. The response has no token, so
+  /// the user must sign in again afterwards.
+  Future<AuthResponse> verifyPasswordReset({
+    required String identifier,
+    required String otp,
+    required String password,
+  }) async {
+    final response = await _dio.post(
+      '/auth/forgot-password/verify',
+      queryParameters: <String, dynamic>{'identifier': identifier, 'otp': otp, 'password': password},
+    );
+    return AuthResponse.fromJson(response.data);
+  }
+
   /// POST /auth/google — Response: { success: true, token: "string" }
   Future<AuthResponse> googleLogin(String idToken) async {
     final response = await _dio.post('/auth/google', data: GoogleLoginRequest(idToken: idToken).toJson());

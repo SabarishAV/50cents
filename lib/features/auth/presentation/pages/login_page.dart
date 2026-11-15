@@ -12,7 +12,10 @@ import '../widgets/google_sign_in_button.dart';
 
 /// Login screen — username/email + password plus Google sign-in.
 class LoginPage extends ConsumerStatefulWidget {
-  const LoginPage({super.key});
+  const LoginPage({super.key, this.initialIdentifier});
+
+  /// Prefills the identifier field, e.g. after a password reset.
+  final String? initialIdentifier;
 
   @override
   ConsumerState<LoginPage> createState() => _LoginPageState();
@@ -28,6 +31,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   @override
   void initState() {
     super.initState();
+    final initialIdentifier = widget.initialIdentifier?.trim();
+    if (initialIdentifier != null && initialIdentifier.isNotEmpty) {
+      _identifierController.text = initialIdentifier;
+    }
     _focusNodes.add(FocusNode());
     _focusNodes.add(FocusNode());
     // Clear a stale error when entering this page.
@@ -154,7 +161,25 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               },
               onFieldSubmitted: (_) => _handleLogin(),
             ),
-            if (authState.error != null) ...[const SizedBox(height: 18), AuthErrorBanner(message: authState.error!)],
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: isBusy
+                    ? null
+                    : () {
+                        ref.read(authProvider.notifier).clearError();
+                        context.go('/forgot-password');
+                      },
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.neonBlue,
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                  textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                child: const Text('Forgot password?'),
+              ),
+            ),
+            if (authState.error != null) ...[const SizedBox(height: 8), AuthErrorBanner(message: authState.error!)],
             const SizedBox(height: 24),
             NeonButton(label: 'Log in', loading: authState.isLoggingIn, onPressed: isBusy ? null : _handleLogin),
             const SizedBox(height: 24),

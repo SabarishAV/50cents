@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:_50cents/core/theme/app_theme.dart';
 import 'package:_50cents/features/auth/presentation/pages/login_page.dart';
+import 'package:_50cents/features/auth/presentation/pages/forgot_password_page.dart';
 import 'package:_50cents/features/auth/presentation/pages/register_page.dart';
 import 'package:_50cents/features/auth/presentation/pages/splash_page.dart';
 import 'package:_50cents/features/auth/presentation/providers/auth_provider.dart';
@@ -21,7 +22,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final auth = ref.read(authProvider);
       final location = state.matchedLocation;
       final isSplash = location == '/splash';
-      final isAuthRoute = location == '/login' || location == '/register';
+      final isAuthRoute = location == '/login' || location == '/register' || location == '/forgot-password';
 
       // Still restoring the persisted session.
       if (!auth.isInitialized) {
@@ -47,8 +48,17 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       GoRoute(path: '/splash', name: 'splash', builder: (context, state) => const SplashPage()),
-      GoRoute(path: '/login', name: 'login', builder: (context, state) => const LoginPage()),
+      GoRoute(
+        path: '/login',
+        name: 'login',
+        builder: (context, state) => LoginPage(initialIdentifier: state.uri.queryParameters['identifier']),
+      ),
       GoRoute(path: '/register', name: 'register', builder: (context, state) => const RegisterPage()),
+      GoRoute(
+        path: '/forgot-password',
+        name: 'forgotPassword',
+        builder: (context, state) => const ForgotPasswordPage(),
+      ),
       GoRoute(path: '/home', name: 'home', builder: (context, state) => const HomePage()),
       GoRoute(path: '/profile', name: 'profile', builder: (context, state) => const ProfilePage()),
       GoRoute(path: '/scan', name: 'scan', builder: (context, state) => const ScanPage()),
