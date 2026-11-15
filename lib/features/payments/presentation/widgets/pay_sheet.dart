@@ -327,7 +327,7 @@ class _PaySheetState extends ConsumerState<_PaySheet> {
     try {
       final predicted = await ref
           .read(paymentRepositoryProvider)
-          .predictCategory(recipient: recipient, note: note.isEmpty ? null : note);
+          .predictCategory(recipient: recipient, transactionType: 'DEBIT', note: note.isEmpty ? null : note);
       final categories = await ref.read(categoriesProvider.future);
       if (!mounted || requestId != _predictRequest) return;
 

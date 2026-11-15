@@ -77,6 +77,14 @@ String formatDateShort(DateTime date) {
   return '${local.day} ${_monthsShort[local.month - 1]} ${local.year}';
 }
 
+/// `12/11/2026` — the day-first format used on manual entry forms.
+String formatDateDmy(DateTime date) {
+  final local = date.toLocal();
+  final day = local.day.toString().padLeft(2, '0');
+  final month = local.month.toString().padLeft(2, '0');
+  return '$day/$month/${local.year}';
+}
+
 /// `12 Nov 2026 · 4:30 PM`
 String formatDateTime(DateTime date) => '${formatDateShort(date)} · ${formatTime(date)}';
 

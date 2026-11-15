@@ -9,6 +9,7 @@ import 'package:_50cents/features/auth/presentation/pages/splash_page.dart';
 import 'package:_50cents/features/auth/presentation/providers/auth_provider.dart';
 import 'package:_50cents/features/home/presentation/pages/home_page.dart';
 import 'package:_50cents/features/payments/presentation/pages/payment_history_page.dart';
+import 'package:_50cents/features/payments/presentation/pages/payment_record_create_page.dart';
 import 'package:_50cents/features/payments/presentation/pages/payment_record_detail_page.dart';
 import 'package:_50cents/features/payments/presentation/pages/scan_page.dart';
 import 'package:_50cents/features/profile/presentation/pages/profile_page.dart';
@@ -57,6 +58,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const PaymentHistoryPage(),
       ),
       GoRoute(
+        path: '/payment-records/new',
+        name: 'paymentRecordCreate',
+        builder: (context, state) => const PaymentRecordCreatePage(),
+      ),
+      GoRoute(
         path: '/payment-records/:id',
         name: 'paymentRecordDetail',
         builder: (context, state) => PaymentRecordDetailPage(recordId: state.pathParameters['id']!),
@@ -85,6 +91,11 @@ class _AppState extends ConsumerState<App> {
       title: '50cents',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
+      // Use UK English so the date picker's input mode accepts and shows
+      // `dd/mm/yyyy` (the format used across the app) instead of `mm/dd/yyyy`.
+      locale: const Locale('en', 'GB'),
+      supportedLocales: const <Locale>[Locale('en', 'GB')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       routerConfig: _router,
     );
   }

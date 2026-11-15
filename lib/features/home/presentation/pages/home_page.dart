@@ -70,7 +70,19 @@ class HomePage extends ConsumerWidget {
                           ],
                         ),
                         const SizedBox(height: 22),
-                        _HistoryTile(onTap: () => context.push('/payment-records')),
+                        _ShortcutTile(
+                          icon: Icons.edit_note_rounded,
+                          title: 'Record a payment',
+                          subtitle: 'Log a payment that happened outside the app',
+                          onTap: () => context.push('/payment-records/new'),
+                        ),
+                        const SizedBox(height: 12),
+                        _ShortcutTile(
+                          icon: Icons.receipt_long_rounded,
+                          title: 'Payment history',
+                          subtitle: 'Your past payments and bank updates',
+                          onTap: () => context.push('/payment-records'),
+                        ),
                         const SizedBox(height: 14),
                         const _RedirectNote(),
                         const SizedBox(height: 18),
@@ -354,9 +366,12 @@ class _ActionCard extends StatelessWidget {
   }
 }
 
-class _HistoryTile extends StatelessWidget {
-  const _HistoryTile({required this.onTap});
+class _ShortcutTile extends StatelessWidget {
+  const _ShortcutTile({required this.icon, required this.title, required this.subtitle, required this.onTap});
 
+  final IconData icon;
+  final String title;
+  final String subtitle;
   final VoidCallback onTap;
 
   @override
@@ -383,7 +398,7 @@ class _HistoryTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(13),
                   border: Border.all(color: AppColors.neonBlue.withValues(alpha: 0.24)),
                 ),
-                child: Icon(Icons.receipt_long_rounded, color: AppColors.neonBlue, size: 20),
+                child: Icon(icon, color: AppColors.neonBlue, size: 20),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -391,14 +406,11 @@ class _HistoryTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Payment history',
+                      title,
                       style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 2),
-                    const Text(
-                      'Your past payments and bank updates',
-                      style: TextStyle(color: AppColors.textMuted, fontSize: 11.5),
-                    ),
+                    Text(subtitle, style: const TextStyle(color: AppColors.textMuted, fontSize: 11.5)),
                   ],
                 ),
               ),

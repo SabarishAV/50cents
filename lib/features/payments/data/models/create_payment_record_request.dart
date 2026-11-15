@@ -1,6 +1,8 @@
 /// Request body for `POST /payment-records`.
 ///
-/// `paidAt` is intentionally omitted so the backend stamps the payment time.
+/// `paidAt` is optional: when omitted the backend stamps the payment time. The
+/// manual entry screen sends it explicitly so payments made outside the app
+/// keep their real date and time.
 class CreatePaymentRecordRequest {
   const CreatePaymentRecordRequest({
     required this.amount,
@@ -11,6 +13,7 @@ class CreatePaymentRecordRequest {
     this.recipientIdentifier,
     this.note,
     this.category,
+    this.paidAt,
   });
 
   final double amount;
@@ -28,6 +31,10 @@ class CreatePaymentRecordRequest {
   final String? category;
   final bool updateBankBalance;
 
+  /// When the payment happened. The API accepts an ISO-8601 instant, so this
+  /// is converted to UTC before being sent.
+  final DateTime? paidAt;
+
   Map<String, dynamic> toJson() {
     final trimmedName = recipientName?.trim();
     final trimmedIdentifier = recipientIdentifier?.trim();
@@ -43,6 +50,7 @@ class CreatePaymentRecordRequest {
       'transactionType': transactionType,
       if (trimmedCategory != null && trimmedCategory.isNotEmpty) 'category': trimmedCategory,
       'updateBankBalance': updateBankBalance,
+      if (paidAt != null) 'paidAt': paidAt!.toUtc().toIso8601String(),
     };
   }
 }

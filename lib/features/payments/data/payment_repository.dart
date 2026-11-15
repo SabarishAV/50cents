@@ -164,14 +164,18 @@ class PaymentRepository {
   ///
   /// The endpoint returns a string map; its key may vary, so every non-empty
   /// value is returned and matched against the category list by the caller.
-  Future<List<String>> predictCategory({required String recipient, String? note}) async {
+  Future<List<String>> predictCategory({
+    required String recipient,
+    required String transactionType,
+    String? note,
+  }) async {
     final trimmedNote = note?.trim();
 
     final response = await _dio.get<dynamic>(
       '/categories/predict',
       queryParameters: <String, dynamic>{
         'recipient': recipient,
-        'transactionType': 'DEBIT',
+        'transactionType': transactionType,
         if (trimmedNote != null && trimmedNote.isNotEmpty) 'note': trimmedNote,
       },
     );
