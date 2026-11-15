@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import 'package:_50cents/core/theme/app_colors.dart';
@@ -21,9 +22,11 @@ class ScanPage extends StatefulWidget {
 
 class _ScanPageState extends State<ScanPage> {
   late final MobileScannerController _controller;
+  final ImagePicker _imagePicker = ImagePicker();
 
   bool _handled = false;
   bool _torchOn = false;
+  bool _readingImage = false;
   String? _message;
   Timer? _messageTimer;
 
@@ -63,14 +66,7 @@ class _ScanPageState extends State<ScanPage> {
   Future<void> _handleCapture(BarcodeCapture capture) async {
     if (_handled) return;
 
-    UpiPayment? payment;
-    for (final barcode in capture.barcodes) {
-      final raw = barcode.rawValue;
-      if (raw == null || raw.trim().isEmpty) continue;
-      payment = UpiPayment.tryParse(raw);
-      if (payment != null) break;
-    }
-
+    final payment = _paymentFromCapture(capture);
     if (payment == null) {
       if (_message == null) {
         _showMessage('That QR is not a UPI payment code. Try another one.');
@@ -78,6 +74,23 @@ class _ScanPageState extends State<ScanPage> {
       return;
     }
 
+    await _completeScan(payment);
+  }
+
+  /// Picks the first UPI payment encoded in a capture, if any.
+  UpiPayment? _paymentFromCapture(BarcodeCapture capture) {
+    for (final barcode in capture.barcodes) {
+      final raw = barcode.rawValue;
+      if (raw == null || raw.trim().isEmpty) continue;
+      final payment = UpiPayment.tryParse(raw);
+      if (payment != null) return payment;
+    }
+    return null;
+  }
+
+  /// Opens the pay sheet for [payment], then leaves the page or resumes the
+  /// camera depending on what the user did.
+  Future<void> _completeScan(UpiPayment payment) async {
     _handled = true;
     try {
       await _controller.stop();
@@ -94,6 +107,49 @@ class _ScanPageState extends State<ScanPage> {
       context.pop();
     } else {
       await _restartScanner();
+    }
+  }
+
+  /// Reads a UPI QR from a photo or screenshot picked from the gallery.
+  Future<void> _scanFromGallery() async {
+    if (_handled || _readingImage) return;
+
+    setState(() => _readingImage = true);
+
+    try {
+      final XFile? picked;
+      try {
+        picked = await _imagePicker.pickImage(source: ImageSource.gallery);
+      } catch (_) {
+        if (mounted) _showMessage('Could not open your photos. Try again.');
+        return;
+      }
+
+      if (picked == null || !mounted) return;
+
+      UpiPayment? payment;
+      try {
+        final capture = await _controller.analyzeImage(picked.path, formats: const [BarcodeFormat.qrCode]);
+        if (capture != null) payment = _paymentFromCapture(capture);
+      } on UnsupportedError {
+        if (mounted) _showMessage('Reading photos is not supported on this device. Use the camera instead.');
+        return;
+      } catch (_) {
+        if (mounted) _showMessage('Could not read that image. Try another photo.');
+        return;
+      }
+
+      if (!mounted) return;
+
+      if (payment == null) {
+        _showMessage('No UPI QR code found in that image. Try another photo.');
+        return;
+      }
+
+      setState(() => _readingImage = false);
+      await _completeScan(payment);
+    } finally {
+      if (mounted && _readingImage) setState(() => _readingImage = false);
     }
   }
 
@@ -242,7 +298,6 @@ class _ScanPageState extends State<ScanPage> {
                     ],
                   ),
                 ),
-                const Spacer(),
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 220),
                   transitionBuilder: (child, animation) => FadeTransition(
@@ -256,7 +311,7 @@ class _ScanPageState extends State<ScanPage> {
                       ? const SizedBox(key: ValueKey<String>('no-message'), height: 0)
                       : Container(
                           key: ValueKey<String>(_message!),
-                          margin: const EdgeInsets.symmetric(horizontal: 28),
+                          margin: const EdgeInsets.fromLTRB(28, 12, 28, 0),
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                           decoration: BoxDecoration(
                             color: AppColors.surface.withValues(alpha: 0.96),
@@ -285,7 +340,12 @@ class _ScanPageState extends State<ScanPage> {
                           ),
                         ),
                 ),
-                const SizedBox(height: 18),
+                const Spacer(),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: _GalleryScanTile(onTap: _scanFromGallery),
+                ),
+                const SizedBox(height: 10),
                 Container(
                   margin: const EdgeInsets.fromLTRB(20, 0, 20, 16),
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
@@ -323,34 +383,6 @@ class _ScanPageState extends State<ScanPage> {
                         ],
                       ),
                       const SizedBox(height: 14),
-                      const Row(
-                        children: [
-                          Expanded(
-                            child: _ScanTip(
-                              icon: Icons.center_focus_strong_rounded,
-                              title: 'Align',
-                              subtitle: 'Fit the QR inside the frame',
-                            ),
-                          ),
-                          SizedBox(width: 8),
-                          Expanded(
-                            child: _ScanTip(
-                              icon: Icons.auto_awesome_rounded,
-                              title: 'Auto-detect',
-                              subtitle: 'No shutter needed',
-                            ),
-                          ),
-                          SizedBox(width: 8),
-                          Expanded(
-                            child: _ScanTip(
-                              icon: Icons.verified_user_rounded,
-                              title: 'Review',
-                              subtitle: 'Confirm payee first',
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
                       Row(
                         children: [
                           const Icon(Icons.lock_outline_rounded, color: AppColors.textMuted, size: 12),
@@ -373,6 +405,38 @@ class _ScanPageState extends State<ScanPage> {
               ],
             ),
           ),
+
+          // Blocks the camera preview while a picked photo is being decoded.
+          if (_readingImage)
+            Positioned.fill(
+              child: AbsorbPointer(
+                child: ColoredBox(
+                  color: Colors.black.withValues(alpha: 0.72),
+                  child: const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 30,
+                          height: 30,
+                          child: CircularProgressIndicator(strokeWidth: 2.4, color: AppColors.neonBlueBright),
+                        ),
+                        SizedBox(height: 16),
+                        Text(
+                          'Reading photo…',
+                          style: TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.1,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -448,36 +512,56 @@ class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderState
   }
 }
 
-class _ScanTip extends StatelessWidget {
-  const _ScanTip({required this.icon, required this.title, required this.subtitle});
+class _GalleryScanTile extends StatelessWidget {
+  const _GalleryScanTile({required this.onTap});
 
-  final IconData icon;
-  final String title;
-  final String subtitle;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 30,
-          height: 30,
+    return Material(
+      color: AppColors.neonBlue.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
           decoration: BoxDecoration(
-            color: AppColors.neonBlue.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(9),
-            border: Border.all(color: AppColors.neonBlue.withValues(alpha: 0.22)),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.neonBlue.withValues(alpha: 0.24)),
           ),
-          child: Icon(icon, color: AppColors.neonBlue, size: 15),
+          child: Row(
+            children: [
+              const PaymentIconBadge(icon: Icons.photo_library_outlined, size: 36, radius: 11),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Scan from photo',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.1,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Use a screenshot or saved QR from your gallery',
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 10.5, height: 1.35),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.textMuted, size: 12),
+            ],
+          ),
         ),
-        const SizedBox(height: 7),
-        Text(
-          title,
-          style: const TextStyle(color: AppColors.textPrimary, fontSize: 11.5, fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 2),
-        Text(subtitle, style: const TextStyle(color: AppColors.textMuted, fontSize: 9.5, height: 1.35)),
-      ],
+      ),
     );
   }
 }

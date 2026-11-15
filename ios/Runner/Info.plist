@@ -28,6 +28,8 @@
 	<string>50cents uses the camera to scan UPI payment QR codes.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>50cents uses your contacts to show the name of the person you are paying by phone number.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>50cents uses your photo library so you can scan a UPI QR code from a saved screenshot.</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>upi</string>
