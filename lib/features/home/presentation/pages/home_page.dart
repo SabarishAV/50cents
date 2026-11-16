@@ -116,6 +116,7 @@ class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         const AppLogo(size: 38, radius: 11),
         const SizedBox(width: 10),
@@ -124,8 +125,41 @@ class _TopBar extends StatelessWidget {
           style: TextStyle(color: AppColors.textPrimary, fontSize: 19, fontWeight: FontWeight.w700, letterSpacing: 0.6),
         ),
         const Spacer(),
+        _QrIcon(onTap: () => context.push('/qr-payment')),
+        const SizedBox(width: 12),
         UserAvatar(session: session, size: 40, onTap: () => context.go('/profile')),
       ],
+    );
+  }
+}
+
+class _QrIcon extends StatelessWidget {
+  const _QrIcon({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'My QR',
+      child: Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppColors.neonBlue.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.neonBlue.withValues(alpha: 0.24)),
+            ),
+            child: const Icon(Icons.qr_code_2_rounded, color: AppColors.neonBlue, size: 20),
+          ),
+        ),
+      ),
     );
   }
 }

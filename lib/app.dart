@@ -12,6 +12,7 @@ import 'package:_50cents/features/home/presentation/pages/home_page.dart';
 import 'package:_50cents/features/payments/presentation/pages/payment_history_page.dart';
 import 'package:_50cents/features/payments/presentation/pages/payment_record_create_page.dart';
 import 'package:_50cents/features/payments/presentation/pages/payment_record_detail_page.dart';
+import 'package:_50cents/features/payments/presentation/pages/qr_payment_page.dart';
 import 'package:_50cents/features/payments/presentation/pages/scan_page.dart';
 import 'package:_50cents/features/profile/presentation/pages/profile_page.dart';
 
@@ -62,6 +63,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/home', name: 'home', builder: (context, state) => const HomePage()),
       GoRoute(path: '/profile', name: 'profile', builder: (context, state) => const ProfilePage()),
       GoRoute(path: '/scan', name: 'scan', builder: (context, state) => const ScanPage()),
+      GoRoute(path: '/qr-payment', name: 'qrPayment', builder: (context, state) => const QrPaymentPage()),
       GoRoute(
         path: '/payment-records',
         name: 'paymentRecords',
