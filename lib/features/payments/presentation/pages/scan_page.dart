@@ -1,28 +1,35 @@
 import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import 'package:_50cents/core/theme/app_colors.dart';
+import 'package:_50cents/core/utils/payment_link.dart';
 import 'package:_50cents/core/widgets/neon_button.dart';
+import 'package:_50cents/features/auth/data/user_repository.dart';
 import 'package:_50cents/features/payments/data/upi_payment.dart';
 import 'package:_50cents/features/payments/presentation/widgets/pay_sheet.dart';
 import 'package:_50cents/features/payments/presentation/widgets/payment_ui.dart';
 
 /// Camera screen that reads a UPI payment QR, then hands the payee to the
 /// user's installed UPI app.
-class ScanPage extends StatefulWidget {
+class ScanPage extends ConsumerStatefulWidget {
   const ScanPage({super.key});
 
   @override
-  State<ScanPage> createState() => _ScanPageState();
+  ConsumerState<ScanPage> createState() => _ScanPageState();
 }
 
-class _ScanPageState extends State<ScanPage> {
+class _ScanPageState extends ConsumerState<ScanPage> {
   late final MobileScannerController _controller;
   final ImagePicker _imagePicker = ImagePicker();
+
+  /// QR payload for the small "My QR" thumbnail in the header.
+  String? _myQrData;
 
   bool _handled = false;
   bool _torchOn = false;
@@ -37,6 +44,34 @@ class _ScanPageState extends State<ScanPage> {
       detectionSpeed: DetectionSpeed.noDuplicates,
       formats: const [BarcodeFormat.qrCode],
     );
+    _loadMyQr();
+  }
+
+  /// Loads the signed-in user's payment ID so the thumbnail shows their real
+  /// QR. If the profile cannot be loaded the thumbnail falls back to an icon.
+  Future<void> _loadMyQr() async {
+    try {
+      final user = await ref.read(userRepositoryProvider).getUser();
+      if (!mounted || user.paymentId.isEmpty) return;
+      setState(() {
+        _myQrData = generateUpiUri(pa: user.paymentId, pn: user.displayName);
+      });
+    } catch (_) {
+      // The thumbnail still navigates to My QR even without a preview.
+    }
+  }
+
+  /// Pauses the camera while the full "My QR" page is open, then resumes it.
+  Future<void> _openMyQr() async {
+    try {
+      await _controller.stop();
+    } catch (_) {
+      // The camera may already be stopped.
+    }
+    if (!mounted) return;
+    await context.push('/qr-payment');
+    if (!mounted) return;
+    await _restartScanner();
   }
 
   @override
@@ -289,11 +324,18 @@ class _ScanPageState extends State<ScanPage> {
                           ],
                         ),
                       ),
-                      _GlassIconButton(
-                        icon: _torchOn ? Icons.flash_on_rounded : Icons.flash_off_rounded,
-                        tooltip: 'Flash',
-                        active: _torchOn,
-                        onPressed: _toggleTorch,
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _MyQrButton(data: _myQrData, onTap: _openMyQr),
+                          const SizedBox(width: 8),
+                          _GlassIconButton(
+                            icon: _torchOn ? Icons.flash_on_rounded : Icons.flash_off_rounded,
+                            tooltip: 'Flash',
+                            active: _torchOn,
+                            onPressed: _toggleTorch,
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -438,6 +480,54 @@ class _ScanPageState extends State<ScanPage> {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// Small QR preview that opens the full "My QR" page.
+class _MyQrButton extends StatelessWidget {
+  const _MyQrButton({required this.data, required this.onTap});
+
+  final String? data;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'My QR',
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(11),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(11),
+          child: Container(
+            width: 40,
+            height: 40,
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(11),
+              border: Border.all(color: AppColors.neonBlue.withValues(alpha: 0.55)),
+            ),
+            child: data == null
+                ? const Icon(Icons.qr_code_2_rounded, color: AppColors.neonBlue, size: 20)
+                : QrImageView(
+                    data: data!,
+                    version: QrVersions.auto,
+                    size: 32,
+                    padding: EdgeInsets.zero,
+                    gapless: true,
+                    backgroundColor: Colors.white,
+                    errorCorrectionLevel: QrErrorCorrectLevel.M,
+                    dataModuleStyle: const QrDataModuleStyle(
+                      dataModuleShape: QrDataModuleShape.square,
+                      color: Color(0xFF0A1420),
+                    ),
+                    eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Color(0xFF0A1420)),
+                  ),
+          ),
+        ),
       ),
     );
   }

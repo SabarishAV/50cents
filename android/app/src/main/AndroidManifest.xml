@@ -3,6 +3,9 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <!-- Used to show a saved contact's name when paying a phone number. -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- Lets the user save a payment QR image to the gallery on Android 10
+         and below. Newer versions save through MediaStore without it. -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
     <application
         android:label="50cents"
         android:name="${applicationName}"

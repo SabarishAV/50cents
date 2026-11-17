@@ -12,11 +12,13 @@ class User {
   String get paymentId => upi ?? mobile ?? email ?? id ?? '';
 
   /// Display-friendly label for the identifier shown in the QR header.
-  String get paymentLabel => upi != null
-      ? 'UPI ID'
-      : mobile != null
-      ? 'Mobile'
-      : 'Account';
+  String get paymentLabel {
+    if (upi != null) {
+      // The API stores a phone-number payment ID in the same `upiId` field.
+      return upi!.contains('@') ? 'UPI ID' : 'Mobile';
+    }
+    return mobile != null ? 'Mobile' : 'Account';
+  }
 
   String get displayName => name ?? email ?? 'there';
 

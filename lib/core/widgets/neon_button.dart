@@ -11,6 +11,7 @@ class NeonButton extends StatelessWidget {
     this.icon,
     this.loading = false,
     this.height = 52,
+    this.fontSize = 16,
   });
 
   final String label;
@@ -18,6 +19,7 @@ class NeonButton extends StatelessWidget {
   final IconData? icon;
   final bool loading;
   final double height;
+  final double fontSize;
 
   @override
   Widget build(BuildContext context) {
@@ -67,13 +69,17 @@ class NeonButton extends StatelessWidget {
                   )
                 else ...[
                   if (icon != null) ...[Icon(icon, size: 20, color: Colors.black), const SizedBox(width: 8)],
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: enabled ? Colors.black : Colors.black.withValues(alpha: 0.45),
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.1,
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: enabled ? Colors.black : Colors.black.withValues(alpha: 0.45),
+                        fontSize: fontSize,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.1,
+                      ),
                     ),
                   ),
                 ],

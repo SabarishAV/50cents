@@ -25,11 +25,13 @@ class UserRepository {
 
   /// PATCH /user — Updates the user's UPI ID.
   ///
-  /// Sends `{ 'upiId': upiId }` as the JSON request body and returns the
-  /// updated user profile.
+  /// The API accepts `{ 'upiId': upiId }` as a JSON body but replies with a
+  /// generic `{ success, message }` envelope, so the updated profile is read
+  /// back with a follow-up `GET /user`. Parsing the PATCH response as a user
+  /// would return an empty profile and wrongly drop the payment ID.
   Future<User> updateUpi({required String upiId}) async {
-    final response = await _dio.patch('/user', data: <String, dynamic>{'upiId': upiId});
-    return User.fromJson(response.data);
+    await _dio.patch('/user', data: <String, dynamic>{'upiId': upiId});
+    return getUser();
   }
 }
 
