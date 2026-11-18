@@ -19,3 +19,6 @@ build:
 
 install:
 	adb -s 1371604144000UP install -r build\app\outputs\flutter-apk\app-debug.apk
+
+http:
+	http-server build\app\outputs\flutter-apk -p 8000 

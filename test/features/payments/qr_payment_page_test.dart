@@ -19,7 +19,33 @@ class _FakeUserRepository implements UserRepository {
 
   @override
   Future<User> updateUpi({required String upiId}) async {
-    user = User(id: user.id, name: user.name, email: user.email, upi: upiId);
+    user = User(
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      upi: upiId,
+      avatarUrl: user.avatarUrl,
+      balance: user.balance,
+    );
+    return user;
+  }
+
+  @override
+  Future<User> updateBalance({required double balance}) async {
+    user = User(
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      upi: user.upi,
+      avatarUrl: user.avatarUrl,
+      balance: balance,
+    );
+    return user;
+  }
+
+  @override
+  Future<User> removeUpiId() async {
+    user = User(id: user.id, name: user.name, email: user.email, avatarUrl: user.avatarUrl, balance: user.balance);
     return user;
   }
 }

@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required for API calls and profile avatars in release builds. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- Needed to scan UPI payment QR codes. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <!-- Used to show a saved contact's name when paying a phone number. -->

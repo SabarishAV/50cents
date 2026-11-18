@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import 'package:_50cents/core/theme/app_colors.dart';
 import 'package:_50cents/core/widgets/neon_background.dart';
+import 'package:_50cents/features/auth/data/models/user.dart';
+import 'package:_50cents/features/auth/data/user_repository.dart';
 import 'package:_50cents/core/widgets/neon_button.dart';
 import 'package:_50cents/features/payments/data/models/payment_record.dart';
 import 'package:_50cents/features/payments/data/models/payment_summary.dart';
@@ -92,6 +94,7 @@ class _PaymentHistoryPageState extends ConsumerState<PaymentHistoryPage> {
   Widget build(BuildContext context) {
     final recordsState = ref.watch(paymentRecordsProvider(_query));
     final summaryState = ref.watch(paymentSummaryProvider(_summaryQuery));
+    final balanceState = ref.watch(currentUserProvider);
 
     return NeonBackground(
       child: Scaffold(
@@ -142,10 +145,14 @@ class _PaymentHistoryPageState extends ConsumerState<PaymentHistoryPage> {
             onRefresh: () async {
               ref.invalidate(paymentRecordsProvider(_query));
               ref.invalidate(paymentSummaryProvider(_summaryQuery));
+              ref.invalidate(currentUserProvider);
               try {
-                await ref.read(paymentRecordsProvider(_query).future);
+                await Future.wait(<Future<dynamic>>[
+                  ref.read(paymentRecordsProvider(_query).future),
+                  ref.read(currentUserProvider.future),
+                ]);
               } catch (_) {
-                // Errors surface through the provider's error state below.
+                // Errors surface through the providers' error states below.
               }
             },
             child: ListView(
@@ -164,6 +171,8 @@ class _PaymentHistoryPageState extends ConsumerState<PaymentHistoryPage> {
                   onReset: _hasActiveFilters ? _resetFilters : null,
                 ),
                 const SizedBox(height: 18),
+                _BalanceCard(state: balanceState, onRefresh: () => ref.invalidate(currentUserProvider)),
+                const SizedBox(height: 14),
                 recordsState.when(
                   loading: () => const _HistoryLoading(),
                   error: (error, _) => _StatePanel(
@@ -188,6 +197,7 @@ class _PaymentHistoryPageState extends ConsumerState<PaymentHistoryPage> {
                           onRecordChanged: () {
                             ref.invalidate(paymentRecordsProvider(_query));
                             ref.invalidate(paymentSummaryProvider(_summaryQuery));
+                            ref.invalidate(currentUserProvider);
                           },
                           onRetrySummary: () => ref.invalidate(paymentSummaryProvider(_summaryQuery)),
                         ),
@@ -1038,6 +1048,229 @@ class _MonthChip extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // Results
 // ---------------------------------------------------------------------------
+
+/// Account-level hero card sourced from `GET /user`.
+///
+/// It lives outside the records state so the balance stays visible while
+/// transactions load, fail, or return no rows for the selected period.
+class _BalanceCard extends StatefulWidget {
+  const _BalanceCard({required this.state, required this.onRefresh});
+
+  final AsyncValue<User> state;
+  final VoidCallback onRefresh;
+
+  @override
+  State<_BalanceCard> createState() => _BalanceCardState();
+}
+
+class _BalanceCardState extends State<_BalanceCard> {
+  bool _revealed = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final data = widget.state.asData?.value;
+    final balance = data?.balance;
+    final loading = widget.state.isLoading && data == null;
+    final error = widget.state.asError?.error;
+    final failed = error != null && data == null;
+
+    final caption = failed
+        ? userErrorMessage(error)
+        : loading
+        ? 'Fetching your latest balance…'
+        : 'Synced with your account';
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.neonBlueDeep.withValues(alpha: 0.38),
+            AppColors.surface,
+            Color.lerp(AppColors.surface, AppColors.neonBlue, 0.06)!,
+          ],
+          stops: const [0.0, 0.58, 1.0],
+        ),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.neonBlue.withValues(alpha: 0.3)),
+        boxShadow: [BoxShadow(color: AppColors.neonBlue.withValues(alpha: 0.14), blurRadius: 34, spreadRadius: 1)],
+      ),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(22),
+              child: const Align(
+                alignment: Alignment.topRight,
+                child: SizedBox(
+                  width: 190,
+                  height: 190,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(colors: <Color>[Color(0x3D00B4FF), Colors.transparent]),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.neonBlue.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppColors.neonBlue.withValues(alpha: 0.25)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.account_balance_wallet_rounded, size: 13, color: AppColors.neonBlueBright),
+                        SizedBox(width: 6),
+                        Text(
+                          'AVAILABLE BALANCE',
+                          style: TextStyle(
+                            color: AppColors.neonBlueBright,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Spacer(),
+                  if (!loading && !failed && balance != null)
+                    InkWell(
+                      onTap: () => setState(() => _revealed = !_revealed),
+                      borderRadius: BorderRadius.circular(10),
+                      child: Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: Icon(
+                          _revealed ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+                          size: 18,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                child: _amountView(loading: loading, failed: failed, balance: balance),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Icon(
+                    loading
+                        ? Icons.sync_rounded
+                        : failed
+                        ? Icons.error_outline_rounded
+                        : Icons.check_circle_outline_rounded,
+                    size: 13,
+                    color: failed ? AppColors.expense : AppColors.neonBlueBright.withValues(alpha: 0.85),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      caption,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: failed ? AppColors.expense.withValues(alpha: 0.9) : AppColors.textMuted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: widget.onRefresh,
+                      borderRadius: BorderRadius.circular(8),
+                      child: const Padding(
+                        padding: EdgeInsets.all(5),
+                        child: Icon(Icons.refresh_rounded, size: 15, color: AppColors.neonBlueBright),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _amountView({required bool loading, required bool failed, required double? balance}) {
+    if (loading) {
+      return Container(
+        key: const ValueKey<String>('loading'),
+        width: 190,
+        height: 38,
+        decoration: BoxDecoration(
+          color: AppColors.textMuted.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(10),
+        ),
+      );
+    }
+    if (failed) {
+      return const Row(
+        key: ValueKey<String>('error'),
+        children: [
+          Icon(Icons.cloud_off_rounded, color: AppColors.expense, size: 20),
+          SizedBox(width: 8),
+          Text(
+            'Balance unavailable',
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.6,
+            ),
+          ),
+        ],
+      );
+    }
+    if (balance == null) {
+      return const Text(
+        '—',
+        key: ValueKey<String>('empty'),
+        style: TextStyle(color: AppColors.textMuted, fontSize: 30, fontWeight: FontWeight.w800, letterSpacing: -1),
+      );
+    }
+    if (!_revealed) {
+      return const Text(
+        '₹ ••••••',
+        key: ValueKey<bool>(false),
+        style: TextStyle(color: AppColors.textPrimary, fontSize: 30, fontWeight: FontWeight.w800, letterSpacing: -1),
+      );
+    }
+    return ShaderMask(
+      key: const ValueKey<bool>(true),
+      blendMode: BlendMode.srcIn,
+      shaderCallback: (bounds) => const LinearGradient(
+        colors: <Color>[AppColors.textPrimary, AppColors.neonBlueBright],
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
+      ).createShader(bounds),
+      child: Text(
+        formatInr(balance, showPaise: true),
+        style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w800, letterSpacing: -1.4, height: 1.05),
+      ),
+    );
+  }
+}
 
 class _HistoryContent extends StatelessWidget {
   const _HistoryContent({

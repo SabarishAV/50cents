@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:_50cents/core/theme/app_colors.dart';
 import 'package:_50cents/core/widgets/app_logo.dart';
 import 'package:_50cents/core/widgets/neon_background.dart';
+import 'package:_50cents/core/widgets/qr_shortcut_button.dart';
 import 'package:_50cents/features/auth/data/models/auth_session.dart';
 import 'package:_50cents/features/auth/presentation/providers/auth_provider.dart';
 import 'package:_50cents/features/auth/presentation/widgets/user_avatar.dart';
@@ -125,41 +126,10 @@ class _TopBar extends StatelessWidget {
           style: TextStyle(color: AppColors.textPrimary, fontSize: 19, fontWeight: FontWeight.w700, letterSpacing: 0.6),
         ),
         const Spacer(),
-        _QrIcon(onTap: () => context.push('/qr-payment')),
+        QrShortcutButton(onTap: () => context.push('/qr-payment')),
         const SizedBox(width: 12),
         UserAvatar(session: session, size: 40, onTap: () => context.go('/profile')),
       ],
-    );
-  }
-}
-
-class _QrIcon extends StatelessWidget {
-  const _QrIcon({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: 'My QR',
-      child: Material(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppColors.neonBlue.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.neonBlue.withValues(alpha: 0.24)),
-            ),
-            child: const Icon(Icons.qr_code_2_rounded, color: AppColors.neonBlue, size: 20),
-          ),
-        ),
-      ),
     );
   }
 }
