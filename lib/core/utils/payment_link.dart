@@ -9,6 +9,12 @@ String generatePaymentRedirectUrl({required String pa, required String pn, requi
   return '${Env.redirectPageUrl}$encoded';
 }
 
+/// Plain redirect link: the redirect URL followed by the UPI ID / mobile
+/// number. The identifier is only URL-encoded, never encrypted.
+String generatePlainPaymentLink({required String pa}) {
+  return '${Env.redirectPageUrl}${Uri.encodeComponent(pa.trim())}';
+}
+
 /// Builds a UPI payment URI for QR codes and deep links.
 ///
 /// [am] and [tn] are included only when non-empty.

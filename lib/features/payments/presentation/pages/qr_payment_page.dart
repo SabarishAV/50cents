@@ -330,10 +330,17 @@ class _QrPaymentPageState extends ConsumerState<QrPaymentPage> {
   Widget _qrView() {
     final user = _user!;
     final request = _request;
+    final paymentLink = generatePlainPaymentLink(pa: user.paymentId);
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 32),
       children: [
-        _MainQrCard(user: user, data: _qrData, onCopy: () => _copyUpi(user.paymentId)),
+        _MainQrCard(
+          user: user,
+          data: _qrData,
+          onCopy: () => _copyUpi(user.paymentId),
+          onShareLink: () => _shareLink(paymentLink),
+          onCopyLink: () => _copyLink(paymentLink),
+        ),
         const SizedBox(height: 18),
         NeonButton(label: 'Request amount', icon: Icons.request_quote_rounded, onPressed: _showAmountSheet),
         const SizedBox(height: 8),
@@ -360,11 +367,19 @@ class _QrPaymentPageState extends ConsumerState<QrPaymentPage> {
 
 /// Gradient card with the user's personal QR and share/save actions.
 class _MainQrCard extends StatelessWidget {
-  const _MainQrCard({required this.user, required this.data, required this.onCopy});
+  const _MainQrCard({
+    required this.user,
+    required this.data,
+    required this.onCopy,
+    required this.onShareLink,
+    required this.onCopyLink,
+  });
 
   final User user;
   final String data;
   final VoidCallback onCopy;
+  final VoidCallback onShareLink;
+  final VoidCallback onCopyLink;
 
   @override
   Widget build(BuildContext context) {
@@ -463,6 +478,18 @@ class _MainQrCard extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           _QrImageActions(data: data, payeeName: user.displayName, paymentId: user.paymentId, label: 'Share QR'),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _OutlinedAction(label: 'Share link', icon: Icons.ios_share_rounded, onTap: onShareLink),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _OutlinedAction(label: 'Copy link', icon: Icons.link_rounded, onTap: onCopyLink),
+              ),
+            ],
+          ),
         ],
       ),
     );
