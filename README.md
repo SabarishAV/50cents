@@ -386,13 +386,114 @@ flutter build appbundle --release
 flutter build ipa --release
 ```
 
-> [!WARNING]
-> The Android release build currently inherits the **debug signing configuration**. Before distributing to a store or testers, configure a production keystore and remove the debug fallback in `android/app/build.gradle.kts`.
+Every Android release build produces `build/app/outputs/flutter-apk/50cents.apk`.
+
+### Tagged GitHub releases
+
+Publishing is automated by `.github/workflows/release.yml`. It runs **only** on a pushed version tag; ordinary commits/pushes to `master`/`main` run the separate CI workflow (format + analysis) and never build or publish an APK.
+
+| Git action | Workflow | Result |
+| --- | --- | --- |
+| Push a branch commit | `ci.yml` | Checks only, no APK |
+| Open/update a PR to `master`/`main` | `ci.yml` | Checks only, no APK |
+| Push tag `v1.2.3` or `1.2.3` | `release.yml` | Signed `50cents.apk` attached to a GitHub Release |
+
+**What the release job does**
+
+1. Checks out the tagged commit.
+2. Installs JDK 17, Flutter `3.47.9`, Android platform 36 and NDK `28.2.13676358`.
+3. Restores the signing keystore and `android/key.properties` from secrets.
+4. Writes `.env` from the production `ENV_*` secrets.
+5. Runs `flutter pub get`.
+6. Derives the version from the tag: `v1.2.3` → `versionName=1.2.3`, `versionCode=1002003` (`major * 1000000 + minor * 1000 + patch`).
+7. Builds with `flutter build apk --release --build-name=<name> --build-number=<code>`.
+8. Verifies `build/app/outputs/flutter-apk/50cents.apk` exists.
+9. Creates (or updates) the GitHub Release for that tag and uploads the APK with generated release notes.
+
+#### One-time setup: repository secrets
+
+Add these under **Settings → Secrets and variables → Actions → New repository secret**:
+
+| Secret | Value |
+| --- | --- |
+| `KEYSTORE_BASE64` | Base64 of `android/50cents.jks` |
+| `KEYSTORE_PASSWORD` | `storePassword` from `android/key.properties` |
+| `KEY_PASSWORD` | `keyPassword` from `android/key.properties` |
+| `KEY_ALIAS` | `keyAlias` from `android/key.properties` |
+| `ENV_API_URL` | Production `API_URL` |
+| `ENV_GOOGLE_SERVER_CLIENT_ID` | Production `GOOGLE_SERVER_CLIENT_ID` |
+| `ENV_REDIRECT_PAGE_URL` | Production `REDIRECT_PAGE_URL` |
+| `ENV_REDIRECT_EXPIRY_MINUTES` | Positive integer, e.g. `10` |
+
+Secrets are only visible to Actions; they are never checked into the repository. To get the keystore base64 value locally (PowerShell):
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("android\50cents.jks"))
+```
+
+> [!NOTE]
+> The keystore and `android/key.properties` are gitignored. Use the same keystore in CI as your installed builds so app updates keep the same signing identity.
+
+`.env` is also gitignored and bundled as an asset, so its values are compiled into the APK. The workflow writes it from the `ENV_*` secrets above; it never uses the placeholders in `.env.example`. If any of them are missing, the build fails rather than shipping broken config. Changing an env value therefore requires a new release build.
+
+#### Cutting a release
+
+Run from the repository root in PowerShell. Commit and push the code **first** — the tag must point at a commit that already contains the workflow on GitHub:
+
+```powershell
+# 1. Commit and push everything that should be in the release.
+git status --short
+git add .github/workflows/release.yml README.md android/app/build.gradle.kts
+git commit -m "ci: publish signed release APK on version tags"
+git push
+
+# 2. Tag that commit and push the tag (this is what triggers the release).
+git tag -a v1.2.3 -m "Release 1.2.3"
+git push origin v1.2.3
+```
+
+For later releases, stage the files you actually changed instead of the paths above:
+
+```powershell
+git status --short
+git add -u                        # stage modified/deleted tracked files
+git add path\to\new\file.dart     # add any new files explicitly
+git commit -m "release: prepare v1.2.4"
+git push
+git tag -a v1.2.4 -m "Release 1.2.4"
+git push origin v1.2.4
+```
+
+Useful read-only checks:
+
+```powershell
+git tag --list          # tags that exist locally
+git show --stat v1.2.3  # commit a tag points to
+git status --short      # what is still uncommitted
+```
+
+If you tag the wrong commit before pushing it, simply delete the local tag and recreate it. If the wrong tag was already pushed, prefer a new version (for example `v1.2.4`) instead of rewriting published tags.
+
+#### Checking the result
+
+- Actions: <https://github.com/SabarishAV/50cents/actions> → run named **Release APK** for the tag.
+- Releases: <https://github.com/SabarishAV/50cents/releases> → the release for that tag contains the downloadable `50cents.apk`.
+- A failed run still leaves the tag; push a corrected commit and a new tag, or re-run the workflow from the Actions UI.
+
+#### Local release build (no GitHub Release)
+
+```powershell
+flutter pub get
+flutter build apk --release
+# APK: build\app\outputs\flutter-apk\50cents.apk
+```
+
+This uses your local `.env`, `android/key.properties`, and `android/50cents.jks`, and does not require any secrets or a tag.
 
 ### Release checklist
 
-- [ ] Set a production `version` in `pubspec.yaml`
-- [ ] Configure release signing for Android
+- [ ] Choose the release tag (`vX.Y.Z`); it sets `versionName`/`versionCode` in CI
+- [ ] Confirm the 8 signing and `ENV_*` secrets are set in GitHub Actions
 - [ ] Configure iOS signing, provisioning, and App Store metadata
 - [ ] Verify `API_URL` points at the production backend
 - [ ] Confirm the Google OAuth client ID matches the target platform
