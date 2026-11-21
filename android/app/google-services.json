@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "825768938615-b690hqlfrfn5e7kuc58h3ktrb532mat4.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.app.u_50cents",
+            "certificate_hash": "a5cfb70d0f962d566cbb6a3f0c74d5ab8abdb455"
+          }
+        },
+        {
           "client_id": "825768938615-gi9sj673e4t1o58uni9dm2vvai6bo8lk.apps.googleusercontent.com",
           "client_type": 3
         }
