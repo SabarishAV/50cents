@@ -6,6 +6,8 @@
 
 **A focused, privacy-first UPI companion for everyday payments.**
 
+Companion backend: [50cents-backend](https://github.com/SabarishAV/50cents-backend) (Spring Boot · PostgreSQL · Redis).
+
 Scan a QR, pick a contact, or enter a UPI ID — then finish the payment in the app you already trust.
 
 <!-- [![CI](https://github.com/SabarishAV/50cents/actions/workflows/ci.yml/badge.svg)](https://github.com/SabarishAV/50cents/actions/workflows/ci.yml) -->
@@ -52,7 +54,6 @@ The app pairs that payment flow with a personal ledger, so every payment you ini
 - [Security & privacy](#security--privacy)
 - [Platform support](#platform-support)
 - [Roadmap](#roadmap)
-- [Contributing](#contributing)
 - [License](#license)
 - [Acknowledgements](#acknowledgements)
 
@@ -300,10 +301,14 @@ Configuration is provided through a `.env` file declared as a Flutter asset. Cop
 | --- | --- | --- |
 | `API_URL` | Yes | Base URL of the 50cents backend, without a trailing slash. |
 | `GOOGLE_SERVER_CLIENT_ID` | Yes | Server-side Google OAuth client ID used to exchange ID tokens. |
+| `REDIRECT_PAGE_URL` | Yes | URL of the redirect landing page used for UPI handoff, with trailing `?d=`. |
+| `REDIRECT_EXPIRY_MINUTES` | Yes | Minutes before a redirect link expires. |
 
 ```dotenv
 API_URL=https://api.example.com
 GOOGLE_SERVER_CLIENT_ID=your-server-client-id.apps.googleusercontent.com
+REDIRECT_PAGE_URL=https://redirect.com/?d=
+REDIRECT_EXPIRY_MINUTES=10
 ```
 
 > [!IMPORTANT]
@@ -442,26 +447,13 @@ Run from the repository root in PowerShell. Commit and push the code **first** �
 
 ```powershell
 # 1. Commit and push everything that should be in the release.
-git status --short
-git add .github/workflows/release.yml README.md android/app/build.gradle.kts
-git commit -m "ci: publish signed release APK on version tags"
+git add .
+git commit -m "feat: new feature"
 git push
 
 # 2. Tag that commit and push the tag (this is what triggers the release).
 git tag -a v1.2.3 -m "Release 1.2.3"
 git push origin v1.2.3
-```
-
-For later releases, stage the files you actually changed instead of the paths above:
-
-```powershell
-git status --short
-git add -u                        # stage modified/deleted tracked files
-git add path\to\new\file.dart     # add any new files explicitly
-git commit -m "release: prepare v1.2.4"
-git push
-git tag -a v1.2.4 -m "Release 1.2.4"
-git push origin v1.2.4
 ```
 
 Useful read-only checks:
@@ -476,8 +468,8 @@ If you tag the wrong commit before pushing it, simply delete the local tag and r
 
 #### Checking the result
 
-- Actions: <https://github.com/SabarishAV/50cents/actions> → run named **Release APK** for the tag.
-- Releases: <https://github.com/SabarishAV/50cents/releases> → the release for that tag contains the downloadable `50cents.apk`.
+- [Actions](https://github.com/SabarishAV/50cents/actions): run named **Release APK** for the tag.
+- [Releases](https://github.com/SabarishAV/50cents/releases): the release for that tag contains the downloadable `50cents.apk`.
 - A failed run still leaves the tag; push a corrected commit and a new tag, or re-run the workflow from the Actions UI.
 
 #### Local release build (no GitHub Release)
@@ -489,16 +481,6 @@ flutter build apk --release
 ```
 
 This uses your local `.env`, `android/key.properties`, and `android/50cents.jks`, and does not require any secrets or a tag.
-
-### Release checklist
-
-- [ ] Choose the release tag (`vX.Y.Z`); it sets `versionName`/`versionCode` in CI
-- [ ] Confirm the 8 signing and `ENV_*` secrets are set in GitHub Actions
-- [ ] Configure iOS signing, provisioning, and App Store metadata
-- [ ] Verify `API_URL` points at the production backend
-- [ ] Confirm the Google OAuth client ID matches the target platform
-- [ ] Run `make check` and `flutter test`
-- [ ] Smoke-test scan, pay, history, profile, and account deletion on a physical device
 
 ---
 
@@ -539,22 +521,20 @@ This uses your local `.env`, `android/key.properties`, and `android/50cents.jks`
 
 Android is the primary development target. iOS behaviour degrades gracefully when an app cannot be detected or targeted.
 
+> [!NOTE]
+> The app is currently set up and tested only on Android. iOS has not been tested end-to-end; behaviour may differ or break. Nothing here should be assumed to work on iOS.
+
 ---
 
 ## Roadmap
 
-- [x] JWT authentication with persisted, encrypted sessions
-- [x] Google Sign-In
-- [x] OTP-based password reset, email change, and account deletion
-- [x] UPI QR scanning from camera and gallery
-- [x] Installed UPI app discovery with direct intents
-- [x] Payment ledger with filters, summaries, and pagination
-- [x] Manual payment entry with category prediction
+Planned work:
+
 - [ ] Broader automated coverage for auth and ledger flows
-- [ ] Production signing and store-ready release pipeline
 - [ ] Full iOS OAuth and UPI parity validation
 - [ ] Localization and accessibility audit
 - [ ] Home-screen widgets and quick-pay shortcuts
+- [ ] **Who owes whom** — a lightweight ledger for shared and borrowed money: track who I owe and who owes me, settle up, and see running balances per person
 
 Roadmap items are directional, not commitments. Open an issue to discuss priorities.
 
@@ -581,6 +561,8 @@ And to the broader UPI ecosystem for a payment standard that makes interoperable
 <div align="center">
 
 **Made for the small ones — the chai, the auto ride, the split bill.**
+
+Found a bug or have an idea? [Open an issue](https://github.com/SabarishAV/50cents/issues).
 
 [Report a bug](https://github.com/SabarishAV/50cents/issues) · [Request a feature](https://github.com/SabarishAV/50cents/issues) · [View source](https://github.com/SabarishAV/50cents)
 
